@@ -227,7 +227,7 @@ class Logger {
   banner(): void {
     if (this.config.silent) return;
     console.log();
-    console.log(chalk.bold.cyan('  🎬 Watcher'));
+    console.log(chalk.bold.cyan('  🎬 Scrub'));
     console.log(chalk.gray('  YouTube Video → Markdown Summarizer'));
     console.log();
   }

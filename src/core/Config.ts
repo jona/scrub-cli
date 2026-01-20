@@ -118,10 +118,10 @@ class ConfigManager {
   private loadConfig(): Config {
     let fileConfig: Partial<Config> = {};
 
-    // Try to load from watcher.config.json
+    // Try to load from scrub.config.json
     const configPaths = [
-      resolve(process.cwd(), 'watcher.config.json'),
-      resolve(process.cwd(), '.watcherrc.json'),
+      resolve(process.cwd(), 'scrub.config.json'),
+      resolve(process.cwd(), '.scrubrc.json'),
     ];
 
     for (const configPath of configPaths) {
@@ -147,9 +147,9 @@ class ConfigManager {
     };
 
     // Override output directory from env if set
-    if (process.env.WATCHER_OUTPUT_DIR) {
+    if (process.env.SCRUB_OUTPUT_DIR) {
       envConfig.output = {
-        directory: process.env.WATCHER_OUTPUT_DIR,
+        directory: process.env.SCRUB_OUTPUT_DIR,
         includeFullTranscript: fileConfig.output?.includeFullTranscript ?? false,
       };
     }
@@ -246,7 +246,7 @@ class ConfigManager {
    * Get cache directory path
    */
   getCacheDir(): string {
-    return process.env.WATCHER_CACHE_DIR || resolve(process.cwd(), 'cache');
+    return process.env.SCRUB_CACHE_DIR || resolve(process.cwd(), 'cache');
   }
 
   /**

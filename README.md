@@ -1,4 +1,4 @@
-# Watcher
+# Scrub
 
 Convert YouTube videos into comprehensive markdown summaries. Perfect for quickly reviewing educational content, creating reference documentation, and building a personal knowledge base.
 
@@ -77,8 +77,8 @@ Convert YouTube videos into comprehensive markdown summaries. Perfect for quickl
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/watcher.git
-cd watcher
+git clone https://github.com/your-username/scrub.git
+cd scrub
 
 # Install dependencies
 npm install
@@ -105,13 +105,13 @@ OPENAI_API_KEY=sk-...
 DEEPGRAM_API_KEY=...
 
 # Optional - custom paths
-WATCHER_OUTPUT_DIR=./output
-WATCHER_CACHE_DIR=./cache
+SCRUB_OUTPUT_DIR=./output
+SCRUB_CACHE_DIR=./cache
 ```
 
 ### Configuration File (optional)
 
-Create `watcher.config.json` for persistent settings:
+Create `scrub.config.json` for persistent settings:
 
 ```json
 {
@@ -139,7 +139,7 @@ Create `watcher.config.json` for persistent settings:
 
 ```bash
 # Process a YouTube video
-watcher https://www.youtube.com/watch?v=VIDEO_ID
+scrub https://www.youtube.com/watch?v=VIDEO_ID
 
 # Or use npm run
 npm run dev -- https://www.youtube.com/watch?v=VIDEO_ID
@@ -148,7 +148,7 @@ npm run dev -- https://www.youtube.com/watch?v=VIDEO_ID
 ### Options
 
 ```bash
-watcher <url> [options]
+scrub <url> [options]
 
 Options:
   -o, --output <path>       Output file path (default: ./output/{title}.md)
@@ -165,29 +165,29 @@ Options:
 
 ```bash
 # Basic processing
-watcher https://www.youtube.com/watch?v=dQw4w9WgXcQ
+scrub https://www.youtube.com/watch?v=dQw4w9WgXcQ
 
 # Save to specific file
-watcher https://youtu.be/abc123 -o ./notes/react-hooks.md
+scrub https://youtu.be/abc123 -o ./notes/react-hooks.md
 
 # Skip visual analysis (faster, cheaper)
-watcher https://youtube.com/watch?v=xyz --no-visuals
+scrub https://youtube.com/watch?v=xyz --no-visuals
 
 # Force OpenAI transcription
-watcher https://youtube.com/watch?v=xyz -t openai
+scrub https://youtube.com/watch?v=xyz -t openai
 
 # Verbose output
-watcher https://youtube.com/watch?v=xyz -v
+scrub https://youtube.com/watch?v=xyz -v
 ```
 
 ### Diagnostic Commands
 
 ```bash
 # Check system prerequisites
-watcher doctor
+scrub doctor
 
 # List available transcription adapters
-watcher transcribers
+scrub transcribers
 ```
 
 ## Output Format
@@ -254,7 +254,7 @@ Summary of this section...
 | deepgram | API Key | ~$0.007/min | Very Fast | Excellent |
 | youtube-captions | Nothing | Free | Instant | Varies |
 
-Adapters are tried in priority order. Set your preference in `watcher.config.json`.
+Adapters are tried in priority order. Set your preference in `scrub.config.json`.
 
 ## Troubleshooting
 

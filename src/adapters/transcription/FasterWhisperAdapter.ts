@@ -27,10 +27,25 @@ export class FasterWhisperAdapter implements ITranscriber {
    * Check if faster-whisper is available
    */
   async isAvailable(): Promise<boolean> {
-    // Find Python
-    const pythonCommands = ['python3', 'python'];
+    // Find Python - check multiple locations since faster-whisper might be
+    // installed in a different Python than the default
+    const pythonCommands = [
+      'python3',
+      'python',
+      '/usr/bin/python3',  // macOS system Python (often has user packages)
+      'python3.9',
+      'python3.10',
+      'python3.11',
+      'python3.12',
+    ];
+
     for (const cmd of pythonCommands) {
-      if (await commandExists(cmd)) {
+      // Check if command exists (for PATH commands) or file exists (for absolute paths)
+      const exists = cmd.startsWith('/')
+        ? existsSync(cmd)
+        : await commandExists(cmd);
+
+      if (exists) {
         // Check if faster-whisper is installed
         try {
           const result = await runCommand(cmd, [

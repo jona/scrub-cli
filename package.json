@@ -1,10 +1,10 @@
 {
-  "name": "watcher",
+  "name": "scrub",
   "version": "1.0.0",
   "description": "Convert YouTube videos into comprehensive markdown summaries",
   "main": "dist/cli/index.js",
   "bin": {
-    "watcher": "./dist/cli/index.js"
+    "scrub": "./dist/cli/index.js"
   },
   "type": "module",
   "scripts": {

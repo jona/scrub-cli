@@ -10,7 +10,7 @@ import type { TranscriptionSource } from '../adapters/transcription/ITranscriber
 const program = new Command();
 
 program
-  .name('watcher')
+  .name('scrub')
   .description('Convert YouTube videos into comprehensive markdown summaries')
   .version('1.0.0');
 
@@ -263,7 +263,7 @@ program
     }
 
     logger.newline();
-    logger.info('Adapters are tried in priority order. Configure in watcher.config.json.');
+    logger.info('Adapters are tried in priority order. Configure in scrub.config.json.');
   });
 
 // Parse and run
