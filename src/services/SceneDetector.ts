@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from 'fs';
 import { join, basename } from 'path';
-import { config } from '../core/Config.js';
+import { config } from '../infrastructure/Config.js';
 import { logger } from '../utils/logger.js';
 import { commandExists, runCommand, ensureDir } from '../utils/helpers.js';
 import type { SceneFrame } from '../types/index.js';

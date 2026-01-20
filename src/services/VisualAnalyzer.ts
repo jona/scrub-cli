@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { readFileSync, statSync } from 'fs';
 import { basename } from 'path';
-import { config } from '../core/Config.js';
+import { config } from '../infrastructure/Config.js';
 import { logger } from '../utils/logger.js';
 import { chunk, formatTimestamp } from '../utils/helpers.js';
 import type { SceneFrame, VisualAnalysis, VisualType } from '../types/index.js';

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
-import { config } from '../core/Config.js';
+import { config } from '../infrastructure/Config.js';
 
 /**
  * Simple file-based cache for transcripts and other data

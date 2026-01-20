@@ -2,16 +2,16 @@
   "name": "scrub",
   "version": "1.0.0",
   "description": "Convert YouTube videos into comprehensive markdown summaries",
-  "main": "dist/cli/index.js",
+  "main": "dist/entrypoints/cli/index.js",
   "bin": {
-    "scrub": "./dist/cli/index.js",
-    "scrub-mcp": "./dist/mcp/index.js"
+    "scrub": "./dist/entrypoints/cli/index.js",
+    "scrub-mcp": "./dist/entrypoints/mcp/index.js"
   },
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/cli/index.js",
-    "dev": "tsx src/cli/index.ts",
+    "start": "node dist/entrypoints/cli/index.js",
+    "dev": "tsx src/entrypoints/cli/index.ts",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },

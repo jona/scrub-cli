@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { config } from '../core/Config.js';
+import { config } from '../infrastructure/Config.js';
 import { logger } from '../utils/logger.js';
 import { formatTimestamp } from '../utils/helpers.js';
 import type {

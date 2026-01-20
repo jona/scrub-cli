@@ -2,7 +2,7 @@
  * Output formatters for agent-friendly responses
  */
 
-import type { ProcessResult } from '../core/VideoProcessor.js';
+import type { ProcessResult } from '../../core/VideoProcessor.js';
 import type { OutputFormat } from './tools.js';
 
 /**

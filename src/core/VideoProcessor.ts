@@ -1,8 +1,8 @@
 import { join } from 'path';
-import { config } from './Config.js';
+import { config } from '../infrastructure/Config.js';
 import { logger } from '../utils/logger.js';
 import { extractVideoId, sanitizeFilename, ensureDir } from '../utils/helpers.js';
-import { videoDownloader } from '../services/VideoDownloader.js';
+import { videoDownloader } from '../adapters/download/VideoDownloader.js';
 import { transcriberFactory } from '../adapters/transcription/index.js';
 import { sceneDetector } from '../services/SceneDetector.js';
 import { visualAnalyzer } from '../services/VisualAnalyzer.js';

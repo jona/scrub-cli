@@ -1,4 +1,4 @@
-import { config } from '../../core/Config.js';
+import { config } from '../../infrastructure/Config.js';
 import { logger } from '../../utils/logger.js';
 import type {
   ITranscriber,

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { logger, fmt } from '../utils/logger.js';
-import { config } from '../core/Config.js';
-import { videoProcessor } from '../core/VideoProcessor.js';
-import { transcriberFactory } from '../adapters/transcription/index.js';
-import type { TranscriptionSource } from '../adapters/transcription/ITranscriber.js';
+import { logger, fmt } from '../../utils/logger.js';
+import { config } from '../../infrastructure/Config.js';
+import { videoProcessor } from '../../core/VideoProcessor.js';
+import { transcriberFactory } from '../../adapters/transcription/index.js';
+import type { TranscriptionSource } from '../../adapters/transcription/ITranscriber.js';
 
 const program = new Command();
 

@@ -1,5 +1,5 @@
 import { writeFileSync } from 'fs';
-import { config } from '../core/Config.js';
+import { config } from '../infrastructure/Config.js';
 import { formatTimestamp, ensureParentDir } from '../utils/helpers.js';
 import type {
   VideoMetadata,

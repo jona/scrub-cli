@@ -15,8 +15,8 @@ import {
   type CallToolRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { videoProcessor } from '../core/VideoProcessor.js';
-import { transcriberFactory } from '../adapters/transcription/index.js';
+import { videoProcessor } from '../../core/VideoProcessor.js';
+import { transcriberFactory } from '../../adapters/transcription/index.js';
 import {
   TOOL_DEFINITIONS,
   ScrubVideoInputSchema,
@@ -26,7 +26,7 @@ import {
   formatDiagnostics,
   formatTranscriberList,
 } from './formatters.js';
-import type { TranscriptionSource } from '../adapters/transcription/ITranscriber.js';
+import type { TranscriptionSource } from '../../adapters/transcription/ITranscriber.js';
 
 // Suppress console logging in MCP mode - must be set before logger is used
 // The logger checks this env var to avoid polluting stdout (JSON-RPC channel)

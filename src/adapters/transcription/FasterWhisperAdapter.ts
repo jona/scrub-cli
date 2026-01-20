@@ -1,7 +1,7 @@
 import { existsSync, writeFileSync } from 'fs';
 import { readFile, unlink } from 'fs/promises';
 import { join } from 'path';
-import { config } from '../../core/Config.js';
+import { config } from '../../infrastructure/Config.js';
 import { logger } from '../../utils/logger.js';
 import { commandExists, runCommand, ensureDir } from '../../utils/helpers.js';
 import type {
