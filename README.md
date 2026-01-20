@@ -190,6 +190,76 @@ scrub doctor
 scrub transcribers
 ```
 
+## Claude Code Integration
+
+Scrub can be used as an MCP (Model Context Protocol) plugin for Claude Code, allowing AI agents to extract content from YouTube videos for context, skills, and knowledge building.
+
+### Installation
+
+```bash
+# 1. Install scrub globally
+npm install -g scrub
+
+# 2. Verify prerequisites are available
+scrub doctor
+
+# 3. Add to Claude Code
+claude mcp add scrub -- scrub-mcp
+```
+
+### Available Tools
+
+Once installed, Claude Code agents have access to these tools:
+
+| Tool | Description |
+|------|-------------|
+| `scrub_video` | Process a YouTube URL into structured content |
+| `scrub_doctor` | Check system prerequisites and configuration |
+| `list_transcribers` | Show available transcription backends |
+
+### Usage Examples
+
+Agents can use scrub like this:
+
+```
+# Extract video content for context
+scrub_video("https://youtube.com/watch?v=VIDEO_ID")
+
+# Get just the transcript
+scrub_video("https://youtube.com/watch?v=VIDEO_ID", outputFormat="transcript")
+
+# Fast processing without visual analysis
+scrub_video("https://youtube.com/watch?v=VIDEO_ID", skipVisuals=true)
+
+# Check system status
+scrub_doctor()
+```
+
+### Output Formats
+
+The `scrub_video` tool supports three output formats:
+
+- **summary** (default): Overview, sections with timestamps, key takeaways, code snippets
+- **transcript**: Raw transcript with timestamps - useful for detailed analysis
+- **full**: Complete ProcessResult with all metadata - for programmatic use
+
+### Manual MCP Configuration
+
+If you prefer to configure MCP manually, add this to your Claude Code config:
+
+```json
+{
+  "mcpServers": {
+    "scrub": {
+      "command": "scrub-mcp",
+      "env": {
+        "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}
+```
+
 ## Output Format
 
 Generated markdown files include:
