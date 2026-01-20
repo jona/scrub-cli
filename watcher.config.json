@@ -1,0 +1,17 @@
+{
+    "transcription": {
+      "priority": ["faster-whisper", "local-whisper", "openai", "youtube-captions"],
+      "whisperModel": "base",
+      "language": "en"
+    },
+    "visual": {
+      "enabled": true,
+      "sceneThreshold": 0.4,
+      "maxFrames": 20,
+      "model": "claude-sonnet-4-20250514"
+    },
+    "output": {
+      "directory": "./output",
+      "includeFullTranscript": false
+    }
+  }
