@@ -43,6 +43,13 @@ const VisualConfigSchema = z.object({
 });
 
 /**
+ * Schema for summarizer configuration
+ */
+const SummarizerConfigSchema = z.object({
+  model: z.string().default('claude-sonnet-4-20250514'),
+});
+
+/**
  * Schema for output configuration
  */
 const OutputConfigSchema = z.object({
@@ -65,6 +72,7 @@ const ApiKeysSchema = z.object({
 const ConfigSchema = z.object({
   transcription: TranscriptionConfigSchema.default({}),
   visual: VisualConfigSchema.default({}),
+  summarizer: SummarizerConfigSchema.default({}),
   output: OutputConfigSchema.default({}),
   apis: ApiKeysSchema.default({}),
 });
@@ -72,6 +80,7 @@ const ConfigSchema = z.object({
 export type Config = z.infer<typeof ConfigSchema>;
 export type TranscriptionConfig = z.infer<typeof TranscriptionConfigSchema>;
 export type VisualConfig = z.infer<typeof VisualConfigSchema>;
+export type SummarizerConfig = z.infer<typeof SummarizerConfigSchema>;
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 
 /**
@@ -92,6 +101,9 @@ const DEFAULT_CONFIG: Config = {
     enabled: true,
     sceneThreshold: 0.4,
     maxFrames: 20,
+    model: 'claude-sonnet-4-20250514',
+  },
+  summarizer: {
     model: 'claude-sonnet-4-20250514',
   },
   output: {
@@ -212,6 +224,13 @@ class ConfigManager {
    */
   getVisual(): VisualConfig {
     return this.config.visual;
+  }
+
+  /**
+   * Get summarizer configuration
+   */
+  getSummarizer(): SummarizerConfig {
+    return this.config.summarizer;
   }
 
   /**
