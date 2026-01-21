@@ -1,22 +1,22 @@
-import { createReadStream, statSync } from 'fs';
-import { createClient, DeepgramClient } from '@deepgram/sdk';
-import { config } from '../../infrastructure/Config.js';
-import { logger } from '../../utils/logger.js';
+import { createReadStream, statSync } from "fs";
+import { createClient, DeepgramClient } from "@deepgram/sdk";
+import { config } from "../../infrastructure/Config.js";
+import { logger } from "../../utils/logger.js";
 import type {
   ITranscriber,
   TranscriptionResult,
   TranscriptionOptions,
   TranscriptSegment,
-} from '../ITranscriber.js';
+} from "../ITranscriber.js";
 
 /**
  * Adapter for Deepgram Speech-to-Text API
- * 
+ *
  * Requires DEEPGRAM_API_KEY environment variable
  * Known for excellent accuracy and fast processing
  */
 export class DeepgramAdapter implements ITranscriber {
-  readonly name = 'Deepgram API';
+  readonly name = "Deepgram API";
   readonly requiresApiKey = true;
 
   private client: DeepgramClient | null = null;
@@ -25,7 +25,7 @@ export class DeepgramAdapter implements ITranscriber {
    * Check if Deepgram API is available
    */
   async isAvailable(): Promise<boolean> {
-    const apiKey = config.getApiKey('deepgram');
+    const apiKey = config.getApiKey("deepgram");
     if (!apiKey) {
       return false;
     }
@@ -46,7 +46,7 @@ export class DeepgramAdapter implements ITranscriber {
       const available = await this.isAvailable();
       if (!available) {
         throw new Error(
-          'Deepgram API key not configured. Set DEEPGRAM_API_KEY environment variable.'
+          "Deepgram API key not configured. Set DEEPGRAM_API_KEY environment variable."
         );
       }
     }
@@ -67,26 +67,24 @@ export class DeepgramAdapter implements ITranscriber {
     const mimetype = this.getMimeType(audioPath);
 
     // Call Deepgram API
-    const { result, error } = await this.client!.listen.prerecorded.transcribeFile(
-      audioStream,
-      {
-        model: 'nova-2', // Latest and most accurate model
+    const { result, error } =
+      await this.client!.listen.prerecorded.transcribeFile(audioStream, {
+        model: "nova-2", // Latest and most accurate model
         smart_format: true,
         punctuate: true,
         paragraphs: true,
         utterances: true,
-        language: language !== 'auto' ? language : undefined,
-        detect_language: language === 'auto',
+        language: language !== "auto" ? language : undefined,
+        detect_language: language === "auto",
         mimetype,
-      }
-    );
+      });
 
     if (error) {
       throw new Error(`Deepgram transcription failed: ${error.message}`);
     }
 
     if (!result) {
-      throw new Error('Deepgram returned empty result');
+      throw new Error("Deepgram returned empty result");
     }
 
     // Parse the response
@@ -97,16 +95,16 @@ export class DeepgramAdapter implements ITranscriber {
    * Get MIME type from file extension
    */
   private getMimeType(filePath: string): string {
-    const ext = filePath.toLowerCase().split('.').pop();
+    const ext = filePath.toLowerCase().split(".").pop();
     const mimeTypes: Record<string, string> = {
-      wav: 'audio/wav',
-      mp3: 'audio/mp3',
-      m4a: 'audio/m4a',
-      flac: 'audio/flac',
-      ogg: 'audio/ogg',
-      webm: 'audio/webm',
+      wav: "audio/wav",
+      mp3: "audio/mp3",
+      m4a: "audio/m4a",
+      flac: "audio/flac",
+      ogg: "audio/ogg",
+      webm: "audio/webm",
     };
-    return mimeTypes[ext || 'wav'] || 'audio/wav';
+    return mimeTypes[ext || "wav"] || "audio/wav";
   }
 
   /**
@@ -117,7 +115,7 @@ export class DeepgramAdapter implements ITranscriber {
     const alternative = channel?.alternatives?.[0];
 
     if (!alternative) {
-      throw new Error('No transcription results in Deepgram response');
+      throw new Error("No transcription results in Deepgram response");
     }
 
     // Use utterances for better segment boundaries if available
@@ -147,18 +145,20 @@ export class DeepgramAdapter implements ITranscriber {
     }
 
     const fullText = alternative.transcript.trim();
-    const duration = result.metadata?.duration || 
+    const duration =
+      result.metadata?.duration ||
       (segments.length > 0 ? segments[segments.length - 1].end : 0);
-    const language = channel?.detected_language || 
-      result.results?.channels?.[0]?.alternatives?.[0]?.languages?.[0] || 
-      'en';
+    const language =
+      channel?.detected_language ||
+      result.results?.channels?.[0]?.alternatives?.[0]?.languages?.[0] ||
+      "en";
 
     return {
       segments,
       fullText,
       language,
       duration,
-      source: 'deepgram',
+      source: "deepgram",
     };
   }
 
@@ -190,9 +190,9 @@ export class DeepgramAdapter implements ITranscriber {
         };
       } else if (currentSegment) {
         currentSegment.end = word.end;
-        currentSegment.text += ' ' + (word.punctuated_word || word.word);
+        currentSegment.text += " " + (word.punctuated_word || word.word);
         if (word.confidence && currentSegment.confidence) {
-          currentSegment.confidence = 
+          currentSegment.confidence =
             (currentSegment.confidence + word.confidence) / 2;
         }
       }

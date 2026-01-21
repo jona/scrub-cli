@@ -42,12 +42,12 @@ export interface SceneFrame {
  * Type of visual content detected in a frame
  */
 export type VisualType =
-  | 'slide'
-  | 'code'
-  | 'diagram'
-  | 'terminal'
-  | 'talking-head'
-  | 'other';
+  | "slide"
+  | "code"
+  | "diagram"
+  | "terminal"
+  | "talking-head"
+  | "other";
 
 /**
  * Analysis result for a single video frame
@@ -176,7 +176,7 @@ export interface OpenQuestion {
   /** The question or uncertainty */
   question: string;
   /** Type: assumption, contradiction, missing_data, debate */
-  type: 'assumption' | 'contradiction' | 'missing_data' | 'debate';
+  type: "assumption" | "contradiction" | "missing_data" | "debate";
   /** Additional context */
   context?: string;
 }
@@ -226,7 +226,7 @@ export interface KnowledgeGraph {
  */
 export interface DifficultyAssessment {
   /** Difficulty level */
-  level: 'beginner' | 'intermediate' | 'advanced';
+  level: "beginner" | "intermediate" | "advanced";
   /** Prerequisites for understanding */
   prerequisites: string[];
   /** Who this content is for */
@@ -252,7 +252,7 @@ export interface ReusabilityPrompts {
  */
 export interface ConfidenceScore {
   /** Overall confidence level */
-  level: 'high' | 'medium' | 'low';
+  level: "high" | "medium" | "low";
   /** Reasoning for the confidence level */
   reasoning: string;
 }
@@ -305,7 +305,14 @@ export interface SummaryResult {
  * Processing progress information
  */
 export interface ProcessingProgress {
-  stage: 'download' | 'transcribe' | 'scene-detect' | 'visual-analyze' | 'summarize' | 'generate' | 'skill-generate';
+  stage:
+    | "download"
+    | "transcribe"
+    | "scene-detect"
+    | "visual-analyze"
+    | "summarize"
+    | "generate"
+    | "skill-generate";
   progress: number;
   message: string;
 }
@@ -318,7 +325,7 @@ export type ProgressCallback = (progress: ProcessingProgress) => void;
 /**
  * Source type for skill checklist items
  */
-export type SkillSourceType = 'summary' | 'transcript' | 'inferred' | null;
+export type SkillSourceType = "summary" | "transcript" | "inferred" | null;
 
 /**
  * Individual checklist item for skill coverage assessment

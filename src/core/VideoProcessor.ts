@@ -83,7 +83,7 @@ export class VideoProcessor {
    */
   async process(
     url: string,
-    options: ProcessOptions = {},
+    options: ProcessOptions = {}
   ): Promise<ProcessResult> {
     const startTime = Date.now();
     const stats: ProcessResult["stats"] = {
@@ -123,7 +123,7 @@ export class VideoProcessor {
       stage: ProcessingStage,
       step: number,
       total: number,
-      message: string,
+      message: string
     ) => {
       options.onProgress?.({
         stage,
@@ -156,12 +156,12 @@ export class VideoProcessor {
         download.audioPath,
         {
           preferredAdapter: options.transcriber,
-        },
+        }
       );
 
       stats.transcriptionTime = Date.now() - transcribeStart;
       logger.debug(
-        `Transcription completed in ${stats.transcriptionTime}ms using ${transcript.source}`,
+        `Transcription completed in ${stats.transcriptionTime}ms using ${transcript.source}`
       );
 
       // Step 3: Visual analysis (optional)
@@ -188,7 +188,7 @@ export class VideoProcessor {
 
         stats.visualAnalysisTime = Date.now() - visualStart;
         logger.debug(
-          `Visual analysis completed in ${stats.visualAnalysisTime}ms (${visuals.length} frames)`,
+          `Visual analysis completed in ${stats.visualAnalysisTime}ms (${visuals.length} frames)`
         );
       } else {
         progress("visual-analyze", 3, 5, "Skipping visual analysis");
@@ -204,7 +204,7 @@ export class VideoProcessor {
         visuals,
         {
           onProgress: (msg) => progress("summarize", 4, 5, msg),
-        },
+        }
       );
 
       stats.summarizationTime = Date.now() - summarizeStart;
@@ -217,13 +217,13 @@ export class VideoProcessor {
       const markdown = markdownGenerator.generate(
         download.metadata,
         summary,
-        includeTranscript ? transcript : undefined,
+        includeTranscript ? transcript : undefined
       );
 
       // Determine output path
       const outputPath = this.resolveOutputPath(
         options.outputPath,
-        download.metadata,
+        download.metadata
       );
 
       // Save the markdown file
@@ -245,13 +245,13 @@ export class VideoProcessor {
               skillName: options.skillName,
               transcript,
               onProgress: (msg) => progress("skill-generate", 6, 6, msg),
-            },
+            }
           );
 
           // Save skill to subdirectory: {outputDir}/{title}/SKILL.md
           const skillDir = this.resolveSkillOutputDir(
             download.metadata,
-            skillResult.suggestedName,
+            skillResult.suggestedName
           );
           ensureDir(skillDir);
           skillPath = join(skillDir, "SKILL.md");
@@ -259,7 +259,7 @@ export class VideoProcessor {
 
           stats.skillGenerationTime = Date.now() - skillStart;
           logger.debug(
-            `Skill generation completed in ${stats.skillGenerationTime}ms`,
+            `Skill generation completed in ${stats.skillGenerationTime}ms`
           );
         } catch (error) {
           // Warn and continue - skill generation is optional
@@ -296,7 +296,7 @@ export class VideoProcessor {
    */
   private resolveOutputPath(
     customPath: string | undefined,
-    metadata: VideoMetadata,
+    metadata: VideoMetadata
   ): string {
     if (customPath) {
       return customPath;
@@ -315,7 +315,7 @@ export class VideoProcessor {
    */
   private resolveSkillOutputDir(
     metadata: VideoMetadata,
-    skillName: string,
+    skillName: string
   ): string {
     const outputDir = config.getOutputDir();
     const dirName = sanitizeFilename(skillName) || metadata.videoId;
@@ -355,7 +355,7 @@ export class VideoProcessor {
     if (availableTranscribers.length === 0) {
       warnings.push(
         "No transcription adapters available. Install whisper.cpp, " +
-          "faster-whisper, or set OPENAI_API_KEY for transcription.",
+          "faster-whisper, or set OPENAI_API_KEY for transcription."
       );
     } else {
       const names = availableTranscribers.map((t) => t.name).join(", ");
@@ -364,7 +364,7 @@ export class VideoProcessor {
 
     // YouTube captions are always available as fallback
     const hasCaptionsFallback = transcribers.find(
-      (t) => t.source === "youtube-captions",
+      (t) => t.source === "youtube-captions"
     )?.available;
 
     if (!hasCaptionsFallback && availableTranscribers.length === 0) {

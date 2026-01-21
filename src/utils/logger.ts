@@ -1,10 +1,10 @@
-import chalk from 'chalk';
-import ora, { Ora } from 'ora';
+import chalk from "chalk";
+import ora, { Ora } from "ora";
 
 /**
  * Log levels for the application
  */
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = "debug" | "info" | "warn" | "error";
 
 /**
  * Logger configuration
@@ -62,7 +62,7 @@ class Logger {
   info(message: string, ...args: unknown[]): void {
     if (this.config.silent) return;
     this.pauseSpinner();
-    console.log(chalk.blue('ℹ'), message, ...args);
+    console.log(chalk.blue("ℹ"), message, ...args);
     this.resumeSpinner();
   }
 
@@ -72,7 +72,7 @@ class Logger {
   success(message: string, ...args: unknown[]): void {
     if (this.config.silent) return;
     this.pauseSpinner();
-    console.log(chalk.green('✓'), message, ...args);
+    console.log(chalk.green("✓"), message, ...args);
     this.resumeSpinner();
   }
 
@@ -82,7 +82,7 @@ class Logger {
   warn(message: string, ...args: unknown[]): void {
     if (this.config.silent) return;
     this.pauseSpinner();
-    console.log(chalk.yellow('⚠'), message, ...args);
+    console.log(chalk.yellow("⚠"), message, ...args);
     this.resumeSpinner();
   }
 
@@ -92,7 +92,7 @@ class Logger {
   error(message: string, ...args: unknown[]): void {
     if (this.config.silent) return;
     this.pauseSpinner();
-    console.error(chalk.red('✖'), message, ...args);
+    console.error(chalk.red("✖"), message, ...args);
     this.resumeSpinner();
   }
 
@@ -102,10 +102,7 @@ class Logger {
   step(step: number, total: number, message: string): void {
     if (this.config.silent) return;
     this.pauseSpinner();
-    console.log(
-      chalk.cyan(`[${step}/${total}]`),
-      message
-    );
+    console.log(chalk.cyan(`[${step}/${total}]`), message);
     this.resumeSpinner();
   }
 
@@ -116,7 +113,7 @@ class Logger {
     if (this.config.silent) return;
     this.spinner = ora({
       text: message,
-      color: 'cyan',
+      color: "cyan",
     }).start();
   }
 
@@ -200,7 +197,7 @@ class Logger {
    */
   divider(): void {
     if (this.config.silent) return;
-    console.log(chalk.gray('─'.repeat(50)));
+    console.log(chalk.gray("─".repeat(50)));
   }
 
   /**
@@ -208,7 +205,7 @@ class Logger {
    */
   keyValue(key: string, value: string | number): void {
     if (this.config.silent) return;
-    console.log(`  ${chalk.gray(key + ':')} ${value}`);
+    console.log(`  ${chalk.gray(key + ":")} ${value}`);
   }
 
   /**
@@ -218,7 +215,7 @@ class Logger {
     if (this.config.silent) return;
     console.log();
     console.log(chalk.bold.cyan(text));
-    console.log(chalk.gray('─'.repeat(text.length)));
+    console.log(chalk.gray("─".repeat(text.length)));
   }
 
   /**
@@ -227,8 +224,8 @@ class Logger {
   banner(): void {
     if (this.config.silent) return;
     console.log();
-    console.log(chalk.bold.cyan('  🎬 Scrub'));
-    console.log(chalk.gray('  YouTube Video → Markdown Summarizer'));
+    console.log(chalk.bold.cyan("  🎬 Scrub"));
+    console.log(chalk.gray("  YouTube Video → Markdown Summarizer"));
     console.log();
   }
 }
@@ -250,7 +247,7 @@ export const fmt = {
   time: (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   },
   duration: (ms: number): string => {
     if (ms < 1000) return `${ms}ms`;

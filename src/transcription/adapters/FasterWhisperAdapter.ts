@@ -1,24 +1,24 @@
-import { existsSync, writeFileSync } from 'fs';
-import { readFile, unlink } from 'fs/promises';
-import { join } from 'path';
-import { config } from '../../infrastructure/Config.js';
-import { logger } from '../../utils/logger.js';
-import { commandExists, runCommand, ensureDir } from '../../utils/helpers.js';
+import { existsSync, writeFileSync } from "fs";
+import { readFile, unlink } from "fs/promises";
+import { join } from "path";
+import { config } from "../../infrastructure/Config.js";
+import { logger } from "../../utils/logger.js";
+import { commandExists, runCommand, ensureDir } from "../../utils/helpers.js";
 import type {
   ITranscriber,
   TranscriptionResult,
   TranscriptionOptions,
   TranscriptSegment,
-} from '../ITranscriber.js';
+} from "../ITranscriber.js";
 
 /**
  * Adapter for faster-whisper Python package
- * 
+ *
  * Requires Python 3.8+ and faster-whisper package:
  * pip install faster-whisper
  */
 export class FasterWhisperAdapter implements ITranscriber {
-  readonly name = 'Faster Whisper (Python)';
+  readonly name = "Faster Whisper (Python)";
   readonly requiresApiKey = false;
 
   private pythonPath: string | null = null;
@@ -30,18 +30,18 @@ export class FasterWhisperAdapter implements ITranscriber {
     // Find Python - check multiple locations since faster-whisper might be
     // installed in a different Python than the default
     const pythonCommands = [
-      'python3',
-      'python',
-      '/usr/bin/python3',  // macOS system Python (often has user packages)
-      'python3.9',
-      'python3.10',
-      'python3.11',
-      'python3.12',
+      "python3",
+      "python",
+      "/usr/bin/python3", // macOS system Python (often has user packages)
+      "python3.9",
+      "python3.10",
+      "python3.11",
+      "python3.12",
     ];
 
     for (const cmd of pythonCommands) {
       // Check if command exists (for PATH commands) or file exists (for absolute paths)
-      const exists = cmd.startsWith('/')
+      const exists = cmd.startsWith("/")
         ? existsSync(cmd)
         : await commandExists(cmd);
 
@@ -49,10 +49,10 @@ export class FasterWhisperAdapter implements ITranscriber {
         // Check if faster-whisper is installed
         try {
           const result = await runCommand(cmd, [
-            '-c',
+            "-c",
             'import faster_whisper; print("ok")',
           ]);
-          if (result.code === 0 && result.stdout.includes('ok')) {
+          if (result.code === 0 && result.stdout.includes("ok")) {
             this.pythonPath = cmd;
             return true;
           }
@@ -76,7 +76,7 @@ export class FasterWhisperAdapter implements ITranscriber {
       const available = await this.isAvailable();
       if (!available) {
         throw new Error(
-          'faster-whisper is not installed. Install with: pip install faster-whisper'
+          "faster-whisper is not installed. Install with: pip install faster-whisper"
         );
       }
     }
@@ -86,7 +86,7 @@ export class FasterWhisperAdapter implements ITranscriber {
     const language = options?.language || transcriptionConfig.language;
 
     // Create temp directory for output
-    const tempDir = join(config.getCacheDir(), 'whisper-temp');
+    const tempDir = join(config.getCacheDir(), "whisper-temp");
     ensureDir(tempDir);
     const outputPath = join(tempDir, `transcript-${Date.now()}.json`);
 
@@ -109,15 +109,17 @@ export class FasterWhisperAdapter implements ITranscriber {
       const result = await runCommand(this.pythonPath!, [scriptPath]);
 
       if (result.code !== 0) {
-        throw new Error(`Faster-whisper transcription failed: ${result.stderr}`);
+        throw new Error(
+          `Faster-whisper transcription failed: ${result.stderr}`
+        );
       }
 
       // Read the JSON output
       if (!existsSync(outputPath)) {
-        throw new Error('Faster-whisper did not produce expected output file');
+        throw new Error("Faster-whisper did not produce expected output file");
       }
 
-      const rawOutput = await readFile(outputPath, 'utf-8');
+      const rawOutput = await readFile(outputPath, "utf-8");
       const whisperOutput = JSON.parse(rawOutput) as FasterWhisperOutput;
 
       return this.parseOutput(whisperOutput);
@@ -153,9 +155,9 @@ model = WhisperModel("${model}", device="auto", compute_type="auto")
 
 # Transcribe
 segments, info = model.transcribe(
-    "${audioPath.replace(/\\/g, '\\\\')}",
+    "${audioPath.replace(/\\/g, "\\\\")}",
     language="${language}" if "${language}" != "auto" else None,
-    word_timestamps=${wordTimestamps ? 'True' : 'False'},
+    word_timestamps=${wordTimestamps ? "True" : "False"},
     vad_filter=True,
 )
 
@@ -174,7 +176,7 @@ for segment in segments:
         "text": segment.text,
         "avg_logprob": segment.avg_logprob,
     }
-    if ${wordTimestamps ? 'True' : 'False'} and segment.words:
+    if ${wordTimestamps ? "True" : "False"} and segment.words:
         seg_data["words"] = [
             {"word": w.word, "start": w.start, "end": w.end, "probability": w.probability}
             for w in segment.words
@@ -182,7 +184,7 @@ for segment in segments:
     result["segments"].append(seg_data)
 
 # Write output
-with open("${outputPath.replace(/\\/g, '\\\\')}", "w") as f:
+with open("${outputPath.replace(/\\/g, "\\\\")}", "w") as f:
     json.dump(result, f, indent=2)
 
 print("Transcription complete")
@@ -200,14 +202,16 @@ print("Transcription complete")
       confidence: seg.avg_logprob ? Math.exp(seg.avg_logprob) : undefined,
     }));
 
-    const fullText = segments.map((s) => s.text).join(' ');
+    const fullText = segments.map((s) => s.text).join(" ");
 
     return {
       segments,
       fullText,
-      language: output.language || 'en',
-      duration: output.duration || (segments.length > 0 ? segments[segments.length - 1].end : 0),
-      source: 'faster-whisper',
+      language: output.language || "en",
+      duration:
+        output.duration ||
+        (segments.length > 0 ? segments[segments.length - 1].end : 0),
+      source: "faster-whisper",
     };
   }
 }

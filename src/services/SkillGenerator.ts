@@ -1,18 +1,18 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { homedir } from 'os';
-import { config } from '../infrastructure/Config.js';
-import { logger } from '../utils/logger.js';
+import Anthropic from "@anthropic-ai/sdk";
+import { readFileSync, existsSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+import { homedir } from "os";
+import { config } from "../infrastructure/Config.js";
+import { logger } from "../utils/logger.js";
 import type {
   VideoMetadata,
   SummaryResult,
   SkillChecklist,
   SkillChecklistItem,
   SkillGenerationResult,
-} from '../types/index.js';
-import type { TranscriptionResult } from '../transcription/ITranscriber.js';
+} from "../types/index.js";
+import type { TranscriptionResult } from "../transcription/ITranscriber.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -48,10 +48,10 @@ export class SkillGenerator {
    */
   private getClient(): Anthropic {
     if (!this.client) {
-      const apiKey = config.getApiKey('anthropic');
+      const apiKey = config.getApiKey("anthropic");
       if (!apiKey) {
         throw new Error(
-          'Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable.'
+          "Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable."
         );
       }
       this.client = new Anthropic({ apiKey });
@@ -65,18 +65,18 @@ export class SkillGenerator {
    */
   private findSkillDir(skillName: string): string | null {
     // Get project root (from dist/services/ or src/services/)
-    const projectRoot = join(__dirname, '..', '..');
+    const projectRoot = join(__dirname, "..", "..");
 
     // Skill search paths in priority order
     const searchPaths = [
-      join(projectRoot, '.skills', skillName),           // Project bundled skills
-      join(process.cwd(), '.skills', skillName),         // CWD .skills/
-      join(process.cwd(), '.claude', 'skills', skillName), // Project .claude/skills/
-      join(homedir(), '.claude', 'skills', skillName),   // Personal ~/.claude/skills/
+      join(projectRoot, ".skills", skillName), // Project bundled skills
+      join(process.cwd(), ".skills", skillName), // CWD .skills/
+      join(process.cwd(), ".claude", "skills", skillName), // Project .claude/skills/
+      join(homedir(), ".claude", "skills", skillName), // Personal ~/.claude/skills/
     ];
 
     for (const skillDir of searchPaths) {
-      const skillFile = join(skillDir, 'SKILL.md');
+      const skillFile = join(skillDir, "SKILL.md");
       if (existsSync(skillFile)) {
         logger.debug(`Found skill '${skillName}' at: ${skillDir}`);
         return skillDir;
@@ -94,28 +94,32 @@ export class SkillGenerator {
       return this.skillCreatorGuide;
     }
 
-    const skillsDir = this.findSkillDir('skill-creator');
+    const skillsDir = this.findSkillDir("skill-creator");
     if (!skillsDir) {
       throw new Error(
-        'skill-creator not found. Expected in .skills/skill-creator/ or ~/.claude/skills/skill-creator/'
+        "skill-creator not found. Expected in .skills/skill-creator/ or ~/.claude/skills/skill-creator/"
       );
     }
 
     // Load main SKILL.md
-    const mainGuide = readFileSync(join(skillsDir, 'SKILL.md'), 'utf-8');
+    const mainGuide = readFileSync(join(skillsDir, "SKILL.md"), "utf-8");
 
     // Load reference files if they exist
-    let workflowsRef = '';
-    let outputPatternsRef = '';
+    let workflowsRef = "";
+    let outputPatternsRef = "";
 
-    const workflowsPath = join(skillsDir, 'references', 'workflows.md');
-    const outputPatternsPath = join(skillsDir, 'references', 'output-patterns.md');
+    const workflowsPath = join(skillsDir, "references", "workflows.md");
+    const outputPatternsPath = join(
+      skillsDir,
+      "references",
+      "output-patterns.md"
+    );
 
     if (existsSync(workflowsPath)) {
-      workflowsRef = readFileSync(workflowsPath, 'utf-8');
+      workflowsRef = readFileSync(workflowsPath, "utf-8");
     }
     if (existsSync(outputPatternsPath)) {
-      outputPatternsRef = readFileSync(outputPatternsPath, 'utf-8');
+      outputPatternsRef = readFileSync(outputPatternsPath, "utf-8");
     }
 
     // Combine into a single guide
@@ -137,10 +141,10 @@ export class SkillGenerator {
   private deriveSkillName(title: string): string {
     return title
       .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
-      .replace(/\s+/g, '-') // Replace spaces with hyphens
-      .replace(/-+/g, '-') // Collapse multiple hyphens
-      .replace(/^-|-$/g, '') // Trim leading/trailing hyphens
+      .replace(/[^a-z0-9\s-]/g, "") // Remove special chars
+      .replace(/\s+/g, "-") // Replace spaces with hyphens
+      .replace(/-+/g, "-") // Collapse multiple hyphens
+      .replace(/^-|-$/g, "") // Trim leading/trailing hyphens
       .substring(0, 50); // Limit length
   }
 
@@ -153,17 +157,18 @@ export class SkillGenerator {
     options?: GenerateSkillOptions
   ): Promise<SkillGenerationResult> {
     if (!this.isAvailable()) {
-      throw new Error('Anthropic API key not configured');
+      throw new Error("Anthropic API key not configured");
     }
 
-    const skillName = options?.skillName || this.deriveSkillName(metadata.title);
+    const skillName =
+      options?.skillName || this.deriveSkillName(metadata.title);
 
-    options?.onProgress?.('Analyzing video content for skill creation...');
+    options?.onProgress?.("Analyzing video content for skill creation...");
 
     // Call 1: Build checklist and assess coverage
     const checklist = await this.buildChecklist(metadata, summary, options);
 
-    options?.onProgress?.('Generating SKILL.md...');
+    options?.onProgress?.("Generating SKILL.md...");
 
     // Call 2: Generate the skill
     const skillMd = await this.generateSkillContent(
@@ -193,7 +198,11 @@ export class SkillGenerator {
     const guide = this.loadSkillCreatorGuide();
     const summarizerConfig = config.getSummarizer();
 
-    const videoContent = this.formatVideoContent(metadata, summary, options?.transcript);
+    const videoContent = this.formatVideoContent(
+      metadata,
+      summary,
+      options?.transcript
+    );
 
     const prompt = `You are an expert at creating AI agent skills. You've been given the skill-creator guide and video content.
 
@@ -241,17 +250,19 @@ Respond with ONLY the JSON object:`;
         response = await client.messages.create({
           model: summarizerConfig.model,
           max_tokens: 2048,
-          messages: [{ role: 'user', content: prompt }],
+          messages: [{ role: "user", content: prompt }],
         });
 
         const responseText = response.content
-          .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+          .filter(
+            (block): block is Anthropic.TextBlock => block.type === "text"
+          )
           .map((block) => block.text)
-          .join('\n');
+          .join("\n");
 
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
-          throw new Error('No JSON found in response');
+          throw new Error("No JSON found in response");
         }
 
         const parsed = JSON.parse(jsonMatch[0]);
@@ -263,7 +274,9 @@ Respond with ONLY the JSON object:`;
 
         return parsed.checklist as SkillChecklist;
       } catch (error) {
-        logger.warn(`Checklist parsing attempt ${attempts} failed: ${(error as Error).message}`);
+        logger.warn(
+          `Checklist parsing attempt ${attempts} failed: ${(error as Error).message}`
+        );
         if (attempts >= maxAttempts) {
           // Return a partial/default checklist on failure
           return this.createDefaultChecklist();
@@ -288,7 +301,11 @@ Respond with ONLY the JSON object:`;
     const guide = this.loadSkillCreatorGuide();
     const summarizerConfig = config.getSummarizer();
 
-    const videoContent = this.formatVideoContent(metadata, summary, options?.transcript);
+    const videoContent = this.formatVideoContent(
+      metadata,
+      summary,
+      options?.transcript
+    );
 
     const prompt = `You are an expert at creating AI agent skills. Generate a complete SKILL.md file.
 
@@ -329,13 +346,13 @@ Respond with ONLY the SKILL.md content (starting with ---):`;
     const response = await client.messages.create({
       model: summarizerConfig.model,
       max_tokens: 8192,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: "user", content: prompt }],
     });
 
     const responseText = response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
       .map((block) => block.text)
-      .join('\n');
+      .join("\n");
 
     // Extract the SKILL.md content (should start with ---)
     const skillMatch = responseText.match(/^---[\s\S]*$/m);
@@ -368,24 +385,24 @@ Overview: ${summary.overview}
 
 ### Thesis and Claims
 ${summary.thesisAndClaims.thesis}
-${summary.thesisAndClaims.keyClaims.map((c) => `- ${c.claim}`).join('\n')}
+${summary.thesisAndClaims.keyClaims.map((c) => `- ${c.claim}`).join("\n")}
 
 ### Actionable Insights
-${summary.actionableInsights.map((a) => `- ${a.action}${a.context ? ` (${a.context})` : ''}`).join('\n')}
+${summary.actionableInsights.map((a) => `- ${a.action}${a.context ? ` (${a.context})` : ""}`).join("\n")}
 
 ### Concepts
-${summary.concepts.map((c) => `- **${c.concept}**: ${c.definition}`).join('\n')}
+${summary.concepts.map((c) => `- **${c.concept}**: ${c.definition}`).join("\n")}
 
 ### Mental Models
-${summary.mentalModels.map((m) => `- **${m.name}**: ${m.description}`).join('\n')}
+${summary.mentalModels.map((m) => `- **${m.name}**: ${m.description}`).join("\n")}
 
 ### Key Takeaways
-${summary.keyTakeaways.map((t) => `- ${t}`).join('\n')}`;
+${summary.keyTakeaways.map((t) => `- ${t}`).join("\n")}`;
 
     if (summary.codeSnippets.length > 0) {
       content += `\n\n### Code Snippets\n`;
       for (const snippet of summary.codeSnippets) {
-        content += `\n\`\`\`${snippet.language || ''}\n${snippet.code}\n\`\`\`\n`;
+        content += `\n\`\`\`${snippet.language || ""}\n${snippet.code}\n\`\`\`\n`;
         if (snippet.context) {
           content += `Context: ${snippet.context}\n`;
         }
@@ -393,13 +410,13 @@ ${summary.keyTakeaways.map((t) => `- ${t}`).join('\n')}`;
     }
 
     if (summary.references.length > 0) {
-      content += `\n\n### References\n${summary.references.map((r) => `- ${r}`).join('\n')}`;
+      content += `\n\n### References\n${summary.references.map((r) => `- ${r}`).join("\n")}`;
     }
 
     if (transcript) {
       content += `\n\n## Transcript (excerpts)\n${transcript.fullText.substring(0, 5000)}`;
       if (transcript.fullText.length > 5000) {
-        content += '\n[... transcript truncated ...]';
+        content += "\n[... transcript truncated ...]";
       }
     }
 
@@ -412,13 +429,13 @@ ${summary.keyTakeaways.map((t) => `- ${t}`).join('\n')}`;
   private createDefaultChecklist(): SkillChecklist {
     const defaultItem: SkillChecklistItem = {
       covered: false,
-      source: 'inferred',
-      gaps: ['Could not analyze - using inference'],
+      source: "inferred",
+      gaps: ["Could not analyze - using inference"],
     };
 
     return {
-      name: { covered: true, source: 'summary' },
-      description: { covered: true, source: 'summary' },
+      name: { covered: true, source: "summary" },
+      description: { covered: true, source: "summary" },
       triggerScenarios: defaultItem,
       domainKnowledge: defaultItem,
       workflows: defaultItem,

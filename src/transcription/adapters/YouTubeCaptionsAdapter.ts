@@ -1,24 +1,24 @@
-import { YoutubeTranscript } from 'youtube-transcript';
-import { logger } from '../../utils/logger.js';
-import { extractVideoId } from '../../utils/helpers.js';
+import { YoutubeTranscript } from "youtube-transcript";
+import { logger } from "../../utils/logger.js";
+import { extractVideoId } from "../../utils/helpers.js";
 import type {
   ITranscriber,
   TranscriptionResult,
   TranscriptionOptions,
   TranscriptSegment,
-} from '../ITranscriber.js';
+} from "../ITranscriber.js";
 
 /**
  * Adapter for fetching YouTube's built-in captions/subtitles
- * 
+ *
  * This is the fallback option - it uses YouTube's auto-generated
  * or manually added captions instead of transcribing the audio.
- * 
+ *
  * Pros: Fast, free, no dependencies
  * Cons: Not all videos have captions, quality varies
  */
 export class YouTubeCaptionsAdapter implements ITranscriber {
-  readonly name = 'YouTube Captions';
+  readonly name = "YouTube Captions";
   readonly requiresApiKey = false;
 
   // Store the video URL for later use since this adapter
@@ -43,7 +43,7 @@ export class YouTubeCaptionsAdapter implements ITranscriber {
 
   /**
    * Fetch captions from YouTube
-   * 
+   *
    * Note: The audioPath parameter is ignored for this adapter.
    * Instead, use setVideoUrl() to set the video URL first.
    */
@@ -57,11 +57,11 @@ export class YouTubeCaptionsAdapter implements ITranscriber {
 
     if (!videoId) {
       throw new Error(
-        'No video URL set for YouTube captions. Call setVideoUrl() first or pass URL as audioPath.'
+        "No video URL set for YouTube captions. Call setVideoUrl() first or pass URL as audioPath."
       );
     }
 
-    const language = options?.language || 'en';
+    const language = options?.language || "en";
 
     logger.debug(`Fetching YouTube captions for video: ${videoId}`);
 
@@ -72,7 +72,7 @@ export class YouTubeCaptionsAdapter implements ITranscriber {
       });
 
       if (!transcript || transcript.length === 0) {
-        throw new Error('No captions available for this video');
+        throw new Error("No captions available for this video");
       }
 
       // Convert to our format
@@ -80,15 +80,18 @@ export class YouTubeCaptionsAdapter implements ITranscriber {
     } catch (error) {
       // Provide helpful error message
       const err = error as Error;
-      if (err.message?.includes('disabled')) {
+      if (err.message?.includes("disabled")) {
         throw new Error(
-          'Captions are disabled for this video. Try using audio transcription instead.'
+          "Captions are disabled for this video. Try using audio transcription instead."
         );
       }
-      if (err.message?.includes('not found') || err.message?.includes('unavailable')) {
+      if (
+        err.message?.includes("not found") ||
+        err.message?.includes("unavailable")
+      ) {
         throw new Error(
-          'No captions found for this video. The video may not have captions, ' +
-          'or they may be in a different language.'
+          "No captions found for this video. The video may not have captions, " +
+            "or they may be in a different language."
         );
       }
       throw error;
@@ -98,15 +101,18 @@ export class YouTubeCaptionsAdapter implements ITranscriber {
   /**
    * Parse YouTube transcript to our format
    */
-  private parseTranscript(transcript: YouTubeTranscriptItem[]): TranscriptionResult {
+  private parseTranscript(
+    transcript: YouTubeTranscriptItem[]
+  ): TranscriptionResult {
     const segments: TranscriptSegment[] = transcript.map((item) => ({
       start: item.offset / 1000, // Convert ms to seconds
       end: (item.offset + item.duration) / 1000,
       text: this.cleanText(item.text),
     }));
 
-    const fullText = segments.map((s) => s.text).join(' ');
-    const duration = segments.length > 0 ? segments[segments.length - 1].end : 0;
+    const fullText = segments.map((s) => s.text).join(" ");
+    const duration =
+      segments.length > 0 ? segments[segments.length - 1].end : 0;
 
     // Detect language from content (rough heuristic)
     const language = this.detectLanguage(fullText);
@@ -116,7 +122,7 @@ export class YouTubeCaptionsAdapter implements ITranscriber {
       fullText,
       language,
       duration,
-      source: 'youtube-captions',
+      source: "youtube-captions",
     };
   }
 
@@ -125,12 +131,12 @@ export class YouTubeCaptionsAdapter implements ITranscriber {
    */
   private cleanText(text: string): string {
     return text
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
-      .replace(/\s+/g, ' ')
+      .replace(/\s+/g, " ")
       .trim();
   }
 
@@ -139,15 +145,15 @@ export class YouTubeCaptionsAdapter implements ITranscriber {
    */
   private detectLanguage(text: string): string {
     // Check for common non-Latin scripts
-    if (/[\u4e00-\u9fff]/.test(text)) return 'zh'; // Chinese
-    if (/[\u3040-\u30ff]/.test(text)) return 'ja'; // Japanese
-    if (/[\uac00-\ud7af]/.test(text)) return 'ko'; // Korean
-    if (/[\u0600-\u06ff]/.test(text)) return 'ar'; // Arabic
-    if (/[\u0400-\u04ff]/.test(text)) return 'ru'; // Cyrillic (Russian)
-    if (/[\u0900-\u097f]/.test(text)) return 'hi'; // Hindi
+    if (/[\u4e00-\u9fff]/.test(text)) return "zh"; // Chinese
+    if (/[\u3040-\u30ff]/.test(text)) return "ja"; // Japanese
+    if (/[\uac00-\ud7af]/.test(text)) return "ko"; // Korean
+    if (/[\u0600-\u06ff]/.test(text)) return "ar"; // Arabic
+    if (/[\u0400-\u04ff]/.test(text)) return "ru"; // Cyrillic (Russian)
+    if (/[\u0900-\u097f]/.test(text)) return "hi"; // Hindi
 
     // Default to English for Latin scripts
-    return 'en';
+    return "en";
   }
 }
 

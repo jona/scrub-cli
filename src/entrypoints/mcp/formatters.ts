@@ -2,8 +2,8 @@
  * Output formatters for agent-friendly responses
  */
 
-import type { ProcessResult } from '../../core/VideoProcessor.js';
-import type { OutputFormat } from './tools.js';
+import type { ProcessResult } from "../../core/VideoProcessor.js";
+import type { OutputFormat } from "./tools.js";
 
 /**
  * Format timestamp in seconds to HH:MM:SS or MM:SS format
@@ -14,9 +14,9 @@ function formatTimestamp(seconds: number): string {
   const secs = Math.floor(seconds % 60);
 
   if (hrs > 0) {
-    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   }
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
 /**
@@ -76,11 +76,11 @@ export function formatOutput(
   format: OutputFormat
 ): SummaryOutput | TranscriptOutput | ProcessResult {
   switch (format) {
-    case 'summary':
+    case "summary":
       return formatSummary(result);
-    case 'transcript':
+    case "transcript":
       return formatTranscript(result);
-    case 'full':
+    case "full":
     default:
       return result;
   }
@@ -182,25 +182,29 @@ export function formatDiagnostics(diagnostics: {
   const recommendations: string[] = [];
 
   if (!diagnostics.ytdlp) {
-    issues.push('yt-dlp is not installed');
-    recommendations.push('Install yt-dlp: brew install yt-dlp (or pip install yt-dlp)');
+    issues.push("yt-dlp is not installed");
+    recommendations.push(
+      "Install yt-dlp: brew install yt-dlp (or pip install yt-dlp)"
+    );
   }
 
   if (!diagnostics.ffmpeg) {
-    issues.push('ffmpeg is not installed');
-    recommendations.push('Install ffmpeg: brew install ffmpeg');
+    issues.push("ffmpeg is not installed");
+    recommendations.push("Install ffmpeg: brew install ffmpeg");
   }
 
   if (!diagnostics.anthropicKey) {
-    issues.push('ANTHROPIC_API_KEY is not configured');
-    recommendations.push('Set ANTHROPIC_API_KEY environment variable');
+    issues.push("ANTHROPIC_API_KEY is not configured");
+    recommendations.push("Set ANTHROPIC_API_KEY environment variable");
   }
 
-  const availableTranscribers = diagnostics.transcribers.filter((t) => t.available);
+  const availableTranscribers = diagnostics.transcribers.filter(
+    (t) => t.available
+  );
   if (availableTranscribers.length === 0) {
-    issues.push('No transcription adapters available');
+    issues.push("No transcription adapters available");
     recommendations.push(
-      'Install whisper.cpp, faster-whisper, or set OPENAI_API_KEY for transcription'
+      "Install whisper.cpp, faster-whisper, or set OPENAI_API_KEY for transcription"
     );
   }
 
@@ -211,11 +215,13 @@ export function formatDiagnostics(diagnostics: {
     externalTools: {
       ytdlp: {
         installed: diagnostics.ytdlp,
-        note: diagnostics.ytdlp ? 'Ready' : 'Required for video download',
+        note: diagnostics.ytdlp ? "Ready" : "Required for video download",
       },
       ffmpeg: {
         installed: diagnostics.ffmpeg,
-        note: diagnostics.ffmpeg ? 'Ready' : 'Required for audio/video processing',
+        note: diagnostics.ffmpeg
+          ? "Ready"
+          : "Required for audio/video processing",
       },
     },
     apiKeys: {
@@ -225,13 +231,13 @@ export function formatDiagnostics(diagnostics: {
       },
       openai: {
         configured: diagnostics.transcribers.some(
-          (t) => t.source === 'openai' && t.available
+          (t) => t.source === "openai" && t.available
         ),
         required: false,
       },
       deepgram: {
         configured: diagnostics.transcribers.some(
-          (t) => t.source === 'deepgram' && t.available
+          (t) => t.source === "deepgram" && t.available
         ),
         required: false,
       },
@@ -262,19 +268,20 @@ export function formatTranscriberList(
   }>
 ): TranscriberInfo[] {
   const descriptions: Record<string, string> = {
-    'local-whisper': 'Local transcription using whisper.cpp - free, privacy-first',
-    'faster-whisper': 'Optimized Python Whisper implementation - free, fast',
-    openai: 'OpenAI Whisper API - cloud-based, excellent quality',
-    deepgram: 'Deepgram API - enterprise-grade, very fast',
-    'youtube-captions': 'YouTube auto-captions - free fallback, quality varies',
+    "local-whisper":
+      "Local transcription using whisper.cpp - free, privacy-first",
+    "faster-whisper": "Optimized Python Whisper implementation - free, fast",
+    openai: "OpenAI Whisper API - cloud-based, excellent quality",
+    deepgram: "Deepgram API - enterprise-grade, very fast",
+    "youtube-captions": "YouTube auto-captions - free fallback, quality varies",
   };
 
   const requiresKey: Record<string, boolean> = {
-    'local-whisper': false,
-    'faster-whisper': false,
+    "local-whisper": false,
+    "faster-whisper": false,
     openai: true,
     deepgram: true,
-    'youtube-captions': false,
+    "youtube-captions": false,
   };
 
   return transcribers.map((t) => ({
@@ -282,6 +289,6 @@ export function formatTranscriberList(
     source: t.source,
     available: t.available,
     requiresApiKey: requiresKey[t.source] ?? false,
-    description: descriptions[t.source] ?? 'Unknown transcription adapter',
+    description: descriptions[t.source] ?? "Unknown transcription adapter",
   }));
 }

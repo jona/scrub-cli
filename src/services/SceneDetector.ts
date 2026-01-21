@@ -1,9 +1,9 @@
-import { existsSync, readdirSync } from 'fs';
-import { join, basename } from 'path';
-import { config } from '../infrastructure/Config.js';
-import { logger } from '../utils/logger.js';
-import { commandExists, runCommand, ensureDir } from '../utils/helpers.js';
-import type { SceneFrame } from '../types/index.js';
+import { existsSync, readdirSync } from "fs";
+import { join, basename } from "path";
+import { config } from "../infrastructure/Config.js";
+import { logger } from "../utils/logger.js";
+import { commandExists, runCommand, ensureDir } from "../utils/helpers.js";
+import type { SceneFrame } from "../types/index.js";
 
 /**
  * Service for detecting scene changes in videos and extracting key frames
@@ -14,7 +14,7 @@ export class SceneDetector {
    * Check if ffmpeg is available
    */
   async isAvailable(): Promise<boolean> {
-    return commandExists('ffmpeg');
+    return commandExists("ffmpeg");
   }
 
   /**
@@ -32,7 +32,7 @@ export class SceneDetector {
   ): Promise<SceneFrame[]> {
     if (!(await this.isAvailable())) {
       throw new Error(
-        'ffmpeg is not installed. Install with: brew install ffmpeg'
+        "ffmpeg is not installed. Install with: brew install ffmpeg"
       );
     }
 
@@ -46,14 +46,12 @@ export class SceneDetector {
     const minInterval = options?.minInterval ?? 2; // Default 2 seconds minimum between frames
 
     // Create output directory for frames
-    const outputDir = options?.outputDir ?? join(
-      config.getCacheDir(),
-      basename(videoPath, '.mp4'),
-      'frames'
-    );
+    const outputDir =
+      options?.outputDir ??
+      join(config.getCacheDir(), basename(videoPath, ".mp4"), "frames");
     ensureDir(outputDir);
 
-    options?.onProgress?.('Analyzing video for scene changes...');
+    options?.onProgress?.("Analyzing video for scene changes...");
 
     // First, get video duration
     const duration = await this.getVideoDuration(videoPath);
@@ -105,10 +103,13 @@ export class SceneDetector {
    * Get video duration using ffprobe
    */
   private async getVideoDuration(videoPath: string): Promise<number> {
-    const result = await runCommand('ffprobe', [
-      '-v', 'error',
-      '-show_entries', 'format=duration',
-      '-of', 'default=noprint_wrappers=1:nokey=1',
+    const result = await runCommand("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration",
+      "-of",
+      "default=noprint_wrappers=1:nokey=1",
       videoPath,
     ]);
 
@@ -129,23 +130,26 @@ export class SceneDetector {
     minInterval: number
   ): Promise<number[]> {
     // Use ffmpeg's scene detection filter with showinfo to get timestamps
-    const result = await runCommand('ffmpeg', [
-      '-i', videoPath,
-      '-filter:v', `select='gt(scene,${threshold})',showinfo`,
-      '-f', 'null',
-      '-',
+    const result = await runCommand("ffmpeg", [
+      "-i",
+      videoPath,
+      "-filter:v",
+      `select='gt(scene,${threshold})',showinfo`,
+      "-f",
+      "null",
+      "-",
     ]);
 
     // Parse timestamps from stderr (ffmpeg outputs info to stderr)
     const timestamps: number[] = [];
-    const lines = result.stderr.split('\n');
+    const lines = result.stderr.split("\n");
 
     for (const line of lines) {
       // Look for showinfo output lines with pts_time
       const match = line.match(/pts_time:(\d+\.?\d*)/);
       if (match) {
         const timestamp = parseFloat(match[1]);
-        
+
         // Apply minimum interval filter
         const lastTs = timestamps[timestamps.length - 1];
         if (lastTs === undefined || timestamp - lastTs >= minInterval) {
@@ -171,7 +175,7 @@ export class SceneDetector {
     minInterval: number
   ): number[] {
     const timestamps: number[] = [];
-    
+
     // Calculate interval to get roughly maxFrames/2 periodic frames
     const targetFrames = Math.floor(maxFrames / 2);
     const interval = Math.max(duration / targetFrames, minInterval);
@@ -197,18 +201,22 @@ export class SceneDetector {
 
     for (let i = 0; i < timestamps.length; i++) {
       const timestamp = timestamps[i];
-      const frameIndex = String(i + 1).padStart(3, '0');
+      const frameIndex = String(i + 1).padStart(3, "0");
       const framePath = join(outputDir, `frame_${frameIndex}.png`);
 
       onProgress?.(`Extracting frame ${i + 1}/${timestamps.length}...`);
 
       // Extract single frame at timestamp
-      const result = await runCommand('ffmpeg', [
-        '-ss', timestamp.toFixed(3),
-        '-i', videoPath,
-        '-vframes', '1',
-        '-q:v', '2', // High quality
-        '-y', // Overwrite if exists
+      const result = await runCommand("ffmpeg", [
+        "-ss",
+        timestamp.toFixed(3),
+        "-i",
+        videoPath,
+        "-vframes",
+        "1",
+        "-q:v",
+        "2", // High quality
+        "-y", // Overwrite if exists
         framePath,
       ]);
 
@@ -238,17 +246,15 @@ export class SceneDetector {
     }
   ): Promise<SceneFrame[]> {
     if (!(await this.isAvailable())) {
-      throw new Error('ffmpeg is not installed');
+      throw new Error("ffmpeg is not installed");
     }
 
     const interval = options?.interval ?? 30; // Default every 30 seconds
     const maxFrames = options?.maxFrames ?? config.getVisual().maxFrames;
 
-    const outputDir = options?.outputDir ?? join(
-      config.getCacheDir(),
-      basename(videoPath, '.mp4'),
-      'frames'
-    );
+    const outputDir =
+      options?.outputDir ??
+      join(config.getCacheDir(), basename(videoPath, ".mp4"), "frames");
     ensureDir(outputDir);
 
     const duration = await this.getVideoDuration(videoPath);
@@ -273,14 +279,14 @@ export class SceneDetector {
    * Get cached frames if available
    */
   getCachedFrames(cacheDir: string): SceneFrame[] | null {
-    const framesDir = join(cacheDir, 'frames');
-    
+    const framesDir = join(cacheDir, "frames");
+
     if (!existsSync(framesDir)) {
       return null;
     }
 
     const files = readdirSync(framesDir)
-      .filter((f) => f.startsWith('frame_') && f.endsWith('.png'))
+      .filter((f) => f.startsWith("frame_") && f.endsWith(".png"))
       .sort();
 
     if (files.length === 0) {

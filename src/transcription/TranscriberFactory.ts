@@ -1,16 +1,16 @@
-import { config } from '../infrastructure/Config.js';
-import { logger } from '../utils/logger.js';
+import { config } from "../infrastructure/Config.js";
+import { logger } from "../utils/logger.js";
 import type {
   ITranscriber,
   TranscriptionResult,
   TranscriptionOptions,
   TranscriptionSource,
-} from './ITranscriber.js';
-import { LocalWhisperAdapter } from './adapters/LocalWhisperAdapter.js';
-import { FasterWhisperAdapter } from './adapters/FasterWhisperAdapter.js';
-import { OpenAIWhisperAdapter } from './adapters/OpenAIWhisperAdapter.js';
-import { DeepgramAdapter } from './adapters/DeepgramAdapter.js';
-import { YouTubeCaptionsAdapter } from './adapters/YouTubeCaptionsAdapter.js';
+} from "./ITranscriber.js";
+import { LocalWhisperAdapter } from "./adapters/LocalWhisperAdapter.js";
+import { FasterWhisperAdapter } from "./adapters/FasterWhisperAdapter.js";
+import { OpenAIWhisperAdapter } from "./adapters/OpenAIWhisperAdapter.js";
+import { DeepgramAdapter } from "./adapters/DeepgramAdapter.js";
+import { YouTubeCaptionsAdapter } from "./adapters/YouTubeCaptionsAdapter.js";
 
 /**
  * Factory for creating and managing transcription adapters
@@ -22,18 +22,20 @@ export class TranscriberFactory {
 
   constructor() {
     // Initialize all adapters
-    this.adapters.set('local-whisper', new LocalWhisperAdapter());
-    this.adapters.set('faster-whisper', new FasterWhisperAdapter());
-    this.adapters.set('openai', new OpenAIWhisperAdapter());
-    this.adapters.set('deepgram', new DeepgramAdapter());
-    this.adapters.set('youtube-captions', new YouTubeCaptionsAdapter());
+    this.adapters.set("local-whisper", new LocalWhisperAdapter());
+    this.adapters.set("faster-whisper", new FasterWhisperAdapter());
+    this.adapters.set("openai", new OpenAIWhisperAdapter());
+    this.adapters.set("deepgram", new DeepgramAdapter());
+    this.adapters.set("youtube-captions", new YouTubeCaptionsAdapter());
   }
 
   /**
    * Set the video URL (needed for YouTube captions fallback)
    */
   setVideoUrl(url: string): void {
-    const captionsAdapter = this.adapters.get('youtube-captions') as YouTubeCaptionsAdapter;
+    const captionsAdapter = this.adapters.get(
+      "youtube-captions"
+    ) as YouTubeCaptionsAdapter;
     captionsAdapter?.setVideoUrl(url);
   }
 
@@ -66,9 +68,14 @@ export class TranscriberFactory {
   /**
    * Get all available adapters in priority order
    */
-  async getAvailableAdapters(): Promise<Array<{ source: TranscriptionSource; adapter: ITranscriber }>> {
+  async getAvailableAdapters(): Promise<
+    Array<{ source: TranscriptionSource; adapter: ITranscriber }>
+  > {
     const priority = config.getTranscription().priority;
-    const available: Array<{ source: TranscriptionSource; adapter: ITranscriber }> = [];
+    const available: Array<{
+      source: TranscriptionSource;
+      adapter: ITranscriber;
+    }> = [];
 
     for (const source of priority) {
       if (await this.isAvailable(source)) {
@@ -138,14 +145,14 @@ export class TranscriberFactory {
     // All adapters failed
     const errorSummary = errors
       .map((e) => `${e.source}: ${e.error.message}`)
-      .join('\n  ');
+      .join("\n  ");
 
     throw new Error(
       `All transcription adapters failed:\n  ${errorSummary}\n\n` +
-        'Suggestions:\n' +
-        '  - Install whisper.cpp for local transcription\n' +
-        '  - Set OPENAI_API_KEY for OpenAI Whisper API\n' +
-        '  - Ensure the video has captions for fallback'
+        "Suggestions:\n" +
+        "  - Install whisper.cpp for local transcription\n" +
+        "  - Set OPENAI_API_KEY for OpenAI Whisper API\n" +
+        "  - Ensure the video has captions for fallback"
     );
   }
 
@@ -161,9 +168,9 @@ export class TranscriberFactory {
     this.setVideoUrl(videoUrl);
 
     // Try captions first
-    const captionsAdapter = this.adapters.get('youtube-captions')!;
+    const captionsAdapter = this.adapters.get("youtube-captions")!;
     try {
-      logger.debug('Trying YouTube captions first');
+      logger.debug("Trying YouTube captions first");
       return await captionsAdapter.transcribe(videoUrl, options);
     } catch (error) {
       logger.debug(`YouTube captions failed: ${(error as Error).message}`);
@@ -175,19 +182,21 @@ export class TranscriberFactory {
     }
 
     throw new Error(
-      'YouTube captions not available and no audio path provided for transcription'
+      "YouTube captions not available and no audio path provided for transcription"
     );
   }
 
   /**
    * Get diagnostic information about adapter availability
    */
-  async getDiagnostics(): Promise<Array<{
-    source: TranscriptionSource;
-    name: string;
-    available: boolean;
-    requiresApiKey: boolean;
-  }>> {
+  async getDiagnostics(): Promise<
+    Array<{
+      source: TranscriptionSource;
+      name: string;
+      available: boolean;
+      requiresApiKey: boolean;
+    }>
+  > {
     const results = [];
 
     for (const [source, adapter] of this.adapters) {

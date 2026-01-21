@@ -18,7 +18,7 @@ const TranscriptionConfigSchema = z.object({
         "openai",
         "deepgram",
         "youtube-captions",
-      ]),
+      ])
     )
     .default(["faster-whisper", "local-whisper", "openai", "youtube-captions"]),
   whisperModel: z
@@ -181,7 +181,7 @@ class ConfigManager {
         ) {
           result[key] = this.deepMerge(
             (result[key] as Partial<Config>) || {},
-            value as Partial<Config>,
+            value as Partial<Config>
           );
         } else if (value !== undefined) {
           result[key] = value;

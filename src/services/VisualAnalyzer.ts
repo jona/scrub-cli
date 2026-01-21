@@ -1,10 +1,10 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { readFileSync, statSync } from 'fs';
-import { basename } from 'path';
-import { config } from '../infrastructure/Config.js';
-import { logger } from '../utils/logger.js';
-import { chunk, formatTimestamp } from '../utils/helpers.js';
-import type { SceneFrame, VisualAnalysis, VisualType } from '../types/index.js';
+import Anthropic from "@anthropic-ai/sdk";
+import { readFileSync, statSync } from "fs";
+import { basename } from "path";
+import { config } from "../infrastructure/Config.js";
+import { logger } from "../utils/logger.js";
+import { chunk, formatTimestamp } from "../utils/helpers.js";
+import type { SceneFrame, VisualAnalysis, VisualType } from "../types/index.js";
 
 /**
  * Service for analyzing video frames using Claude Vision API
@@ -24,10 +24,10 @@ export class VisualAnalyzer {
    */
   private getClient(): Anthropic {
     if (!this.client) {
-      const apiKey = config.getApiKey('anthropic');
+      const apiKey = config.getApiKey("anthropic");
       if (!apiKey) {
         throw new Error(
-          'Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable.'
+          "Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable."
         );
       }
       this.client = new Anthropic({ apiKey });
@@ -46,7 +46,7 @@ export class VisualAnalyzer {
     }
   ): Promise<VisualAnalysis[]> {
     if (!this.isAvailable()) {
-      throw new Error('Anthropic API key not configured');
+      throw new Error("Anthropic API key not configured");
     }
 
     if (frames.length === 0) {
@@ -56,7 +56,9 @@ export class VisualAnalyzer {
     const visualConfig = config.getVisual();
     const batchSize = options?.batchSize ?? 10; // Process up to 10 frames per API call
 
-    logger.debug(`Analyzing ${frames.length} frames in batches of ${batchSize}`);
+    logger.debug(
+      `Analyzing ${frames.length} frames in batches of ${batchSize}`
+    );
 
     const results: VisualAnalysis[] = [];
     const batches = chunk(frames, batchSize);
@@ -84,11 +86,11 @@ export class VisualAnalyzer {
     const client = this.getClient();
 
     // Build the message content with all images
-    const content: Anthropic.MessageParam['content'] = [];
+    const content: Anthropic.MessageParam["content"] = [];
 
     // Add instruction text
     content.push({
-      type: 'text',
+      type: "text",
       text: this.buildAnalysisPrompt(frames),
     });
 
@@ -97,9 +99,9 @@ export class VisualAnalyzer {
       const imageData = this.loadImageAsBase64(frame.framePath);
       if (imageData) {
         content.push({
-          type: 'image',
+          type: "image",
           source: {
-            type: 'base64',
+            type: "base64",
             media_type: imageData.mediaType,
             data: imageData.data,
           },
@@ -113,7 +115,7 @@ export class VisualAnalyzer {
       max_tokens: 4096,
       messages: [
         {
-          role: 'user',
+          role: "user",
           content,
         },
       ],
@@ -121,9 +123,9 @@ export class VisualAnalyzer {
 
     // Parse the response
     const responseText = response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
       .map((block) => block.text)
-      .join('\n');
+      .join("\n");
 
     return this.parseAnalysisResponse(responseText, frames);
   }
@@ -134,7 +136,7 @@ export class VisualAnalyzer {
   private buildAnalysisPrompt(frames: SceneFrame[]): string {
     const frameList = frames
       .map((f, i) => `Frame ${i + 1} (${formatTimestamp(f.timestamp)})`)
-      .join(', ');
+      .join(", ");
 
     return `Analyze these ${frames.length} frames from an educational/instructional video: ${frameList}
 
@@ -162,37 +164,45 @@ Analyze all ${frames.length} frames now:`;
   /**
    * Load an image file as base64
    */
-  private loadImageAsBase64(
-    imagePath: string
-  ): { data: string; mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp' } | null {
+  private loadImageAsBase64(imagePath: string): {
+    data: string;
+    mediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+  } | null {
     try {
       // Check file size (Claude has limits)
       const stats = statSync(imagePath);
       const maxSizeMB = 20; // 20MB limit per image
       if (stats.size > maxSizeMB * 1024 * 1024) {
-        logger.warn(`Image ${basename(imagePath)} exceeds ${maxSizeMB}MB limit, skipping`);
+        logger.warn(
+          `Image ${basename(imagePath)} exceeds ${maxSizeMB}MB limit, skipping`
+        );
         return null;
       }
 
       const buffer = readFileSync(imagePath);
-      const data = buffer.toString('base64');
+      const data = buffer.toString("base64");
 
       // Determine media type from extension
-      const ext = imagePath.toLowerCase().split('.').pop();
-      const mediaTypes: Record<string, 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'> = {
-        png: 'image/png',
-        jpg: 'image/jpeg',
-        jpeg: 'image/jpeg',
-        gif: 'image/gif',
-        webp: 'image/webp',
+      const ext = imagePath.toLowerCase().split(".").pop();
+      const mediaTypes: Record<
+        string,
+        "image/png" | "image/jpeg" | "image/gif" | "image/webp"
+      > = {
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        gif: "image/gif",
+        webp: "image/webp",
       };
 
       return {
         data,
-        mediaType: mediaTypes[ext || 'png'] || 'image/png',
+        mediaType: mediaTypes[ext || "png"] || "image/png",
       };
     } catch (error) {
-      logger.warn(`Failed to load image ${imagePath}: ${(error as Error).message}`);
+      logger.warn(
+        `Failed to load image ${imagePath}: ${(error as Error).message}`
+      );
       return null;
     }
   }
@@ -208,7 +218,7 @@ Analyze all ${frames.length} frames now:`;
       // Extract JSON from the response (it might be wrapped in markdown code blocks)
       const jsonMatch = responseText.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
-        logger.warn('Could not find JSON array in response');
+        logger.warn("Could not find JSON array in response");
         return this.createFallbackAnalysis(frames);
       }
 
@@ -225,13 +235,15 @@ Analyze all ${frames.length} frames now:`;
 
         return {
           timestamp: frame?.timestamp ?? index * 30,
-          description: item.description || 'No description available',
-          extractedText: item.extractedText || '',
+          description: item.description || "No description available",
+          extractedText: item.extractedText || "",
           visualType: this.normalizeVisualType(item.visualType),
         };
       });
     } catch (error) {
-      logger.warn(`Failed to parse analysis response: ${(error as Error).message}`);
+      logger.warn(
+        `Failed to parse analysis response: ${(error as Error).message}`
+      );
       return this.createFallbackAnalysis(frames);
     }
   }
@@ -242,12 +254,12 @@ Analyze all ${frames.length} frames now:`;
   private normalizeVisualType(type: string): VisualType {
     const normalized = type?.toLowerCase().trim();
     const validTypes: VisualType[] = [
-      'slide',
-      'code',
-      'diagram',
-      'terminal',
-      'talking-head',
-      'other',
+      "slide",
+      "code",
+      "diagram",
+      "terminal",
+      "talking-head",
+      "other",
     ];
 
     if (validTypes.includes(normalized as VisualType)) {
@@ -255,23 +267,35 @@ Analyze all ${frames.length} frames now:`;
     }
 
     // Map common variations
-    if (normalized?.includes('code') || normalized?.includes('programming')) {
-      return 'code';
+    if (normalized?.includes("code") || normalized?.includes("programming")) {
+      return "code";
     }
-    if (normalized?.includes('slide') || normalized?.includes('presentation')) {
-      return 'slide';
+    if (normalized?.includes("slide") || normalized?.includes("presentation")) {
+      return "slide";
     }
-    if (normalized?.includes('diagram') || normalized?.includes('chart') || normalized?.includes('graph')) {
-      return 'diagram';
+    if (
+      normalized?.includes("diagram") ||
+      normalized?.includes("chart") ||
+      normalized?.includes("graph")
+    ) {
+      return "diagram";
     }
-    if (normalized?.includes('terminal') || normalized?.includes('console') || normalized?.includes('shell')) {
-      return 'terminal';
+    if (
+      normalized?.includes("terminal") ||
+      normalized?.includes("console") ||
+      normalized?.includes("shell")
+    ) {
+      return "terminal";
     }
-    if (normalized?.includes('person') || normalized?.includes('speaker') || normalized?.includes('face')) {
-      return 'talking-head';
+    if (
+      normalized?.includes("person") ||
+      normalized?.includes("speaker") ||
+      normalized?.includes("face")
+    ) {
+      return "talking-head";
     }
 
-    return 'other';
+    return "other";
   }
 
   /**
@@ -280,9 +304,9 @@ Analyze all ${frames.length} frames now:`;
   private createFallbackAnalysis(frames: SceneFrame[]): VisualAnalysis[] {
     return frames.map((frame) => ({
       timestamp: frame.timestamp,
-      description: 'Visual content at this timestamp',
-      extractedText: '',
-      visualType: 'other' as VisualType,
+      description: "Visual content at this timestamp",
+      extractedText: "",
+      visualType: "other" as VisualType,
     }));
   }
 
@@ -291,12 +315,14 @@ Analyze all ${frames.length} frames now:`;
    */
   async analyzeFrame(frame: SceneFrame): Promise<VisualAnalysis> {
     const results = await this.analyzeFrames([frame]);
-    return results[0] || {
-      timestamp: frame.timestamp,
-      description: 'Analysis unavailable',
-      extractedText: '',
-      visualType: 'other',
-    };
+    return (
+      results[0] || {
+        timestamp: frame.timestamp,
+        description: "Analysis unavailable",
+        extractedText: "",
+        visualType: "other",
+      }
+    );
   }
 }
 

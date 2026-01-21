@@ -16,11 +16,11 @@ export interface TranscriptSegment {
  * Source identifier for the transcription method used
  */
 export type TranscriptionSource =
-  | 'local-whisper'
-  | 'faster-whisper'
-  | 'openai'
-  | 'deepgram'
-  | 'youtube-captions';
+  | "local-whisper"
+  | "faster-whisper"
+  | "openai"
+  | "deepgram"
+  | "youtube-captions";
 
 /**
  * Complete result from a transcription operation
@@ -45,7 +45,7 @@ export interface TranscriptionOptions {
   /** Target language code for transcription */
   language?: string;
   /** Whisper model size for local transcription */
-  model?: 'tiny' | 'base' | 'small' | 'medium' | 'large';
+  model?: "tiny" | "base" | "small" | "medium" | "large";
   /** Enable word-level timestamps if supported */
   wordTimestamps?: boolean;
 }

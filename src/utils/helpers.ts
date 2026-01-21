@@ -1,7 +1,7 @@
-import { exec, spawn } from 'child_process';
-import { promisify } from 'util';
-import { existsSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { exec, spawn } from "child_process";
+import { promisify } from "util";
+import { existsSync, mkdirSync } from "fs";
+import { dirname } from "path";
 
 export const execAsync = promisify(exec);
 
@@ -42,7 +42,7 @@ export function extractVideoId(url: string): string | null {
  */
 export async function commandExists(command: string): Promise<boolean> {
   try {
-    const checkCmd = process.platform === 'win32' ? 'where' : 'which';
+    const checkCmd = process.platform === "win32" ? "where" : "which";
     await execAsync(`${checkCmd} ${command}`);
     return true;
   } catch {
@@ -68,26 +68,26 @@ export function runCommand(
       shell: false,
     });
 
-    let stdout = '';
-    let stderr = '';
+    let stdout = "";
+    let stderr = "";
 
-    proc.stdout.on('data', (data) => {
+    proc.stdout.on("data", (data) => {
       const str = data.toString();
       stdout += str;
       options?.onStdout?.(str);
     });
 
-    proc.stderr.on('data', (data) => {
+    proc.stderr.on("data", (data) => {
       const str = data.toString();
       stderr += str;
       options?.onStderr?.(str);
     });
 
-    proc.on('close', (code) => {
+    proc.on("close", (code) => {
       resolve({ code: code || 0, stdout, stderr });
     });
 
-    proc.on('error', (err) => {
+    proc.on("error", (err) => {
       reject(err);
     });
   });
@@ -118,16 +118,16 @@ export function formatTimestamp(seconds: number): string {
   const secs = Math.floor(seconds % 60);
 
   if (hrs > 0) {
-    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   }
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
 /**
  * Parse timestamp string to seconds
  */
 export function parseTimestamp(timestamp: string): number {
-  const parts = timestamp.split(':').map(Number);
+  const parts = timestamp.split(":").map(Number);
   if (parts.length === 3) {
     return parts[0] * 3600 + parts[1] * 60 + parts[2];
   }
@@ -142,10 +142,10 @@ export function parseTimestamp(timestamp: string): number {
  */
 export function sanitizeFilename(name: string): string {
   return name
-    .replace(/[<>:"/\\|?*]/g, '') // Remove invalid characters
-    .replace(/\s+/g, '-') // Replace spaces with hyphens
-    .replace(/-+/g, '-') // Replace multiple hyphens with single
-    .replace(/^-|-$/g, '') // Remove leading/trailing hyphens
+    .replace(/[<>:"/\\|?*]/g, "") // Remove invalid characters
+    .replace(/\s+/g, "-") // Replace spaces with hyphens
+    .replace(/-+/g, "-") // Replace multiple hyphens with single
+    .replace(/^-|-$/g, "") // Remove leading/trailing hyphens
     .substring(0, 100); // Limit length
 }
 
@@ -211,5 +211,5 @@ export function chunk<T>(array: T[], size: number): T[][] {
  */
 export function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength - 3) + '...';
+  return text.substring(0, maxLength - 3) + "...";
 }

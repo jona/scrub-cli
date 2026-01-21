@@ -2,58 +2,62 @@
  * MCP Tool definitions and Zod schemas for scrub
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * Output format options for scrub_video
  */
-export const OutputFormat = z.enum(['full', 'summary', 'transcript']);
+export const OutputFormat = z.enum(["full", "summary", "transcript"]);
 export type OutputFormat = z.infer<typeof OutputFormat>;
 
 /**
  * Schema for scrub_video tool input
  */
 export const ScrubVideoInputSchema = z.object({
-  url: z.string().describe('YouTube video URL to process'),
+  url: z.string().describe("YouTube video URL to process"),
   skipVisuals: z
     .boolean()
     .optional()
     .default(false)
-    .describe('Skip visual analysis for faster processing'),
+    .describe("Skip visual analysis for faster processing"),
   transcriber: z
     .enum([
-      'local-whisper',
-      'faster-whisper',
-      'openai',
-      'deepgram',
-      'youtube-captions',
+      "local-whisper",
+      "faster-whisper",
+      "openai",
+      "deepgram",
+      "youtube-captions",
     ])
     .optional()
-    .describe('Force a specific transcription adapter'),
+    .describe("Force a specific transcription adapter"),
   outputFormat: OutputFormat.optional()
-    .default('summary')
+    .default("summary")
     .describe(
-      'Output format: full (complete result), summary (sections + takeaways), transcript (raw text)'
+      "Output format: full (complete result), summary (sections + takeaways), transcript (raw text)"
     ),
   maxFrames: z
     .number()
     .optional()
-    .describe('Maximum frames to analyze for visual content'),
+    .describe("Maximum frames to analyze for visual content"),
   sceneThreshold: z
     .number()
     .min(0)
     .max(1)
     .optional()
-    .describe('Scene detection sensitivity (0-1)'),
+    .describe("Scene detection sensitivity (0-1)"),
   generateSkill: z
     .boolean()
     .optional()
     .default(false)
-    .describe('Generate SKILL.md alongside regular output - creates a reusable AI agent skill from the video content'),
+    .describe(
+      "Generate SKILL.md alongside regular output - creates a reusable AI agent skill from the video content"
+    ),
   skillName: z
     .string()
     .optional()
-    .describe('Custom skill name (auto-derived from video title if not provided)'),
+    .describe(
+      "Custom skill name (auto-derived from video title if not provided)"
+    ),
 });
 
 export type ScrubVideoInput = z.infer<typeof ScrubVideoInputSchema>;
@@ -76,7 +80,7 @@ export type ListTranscribersInput = z.infer<typeof ListTranscribersInputSchema>;
  */
 export const TOOL_DEFINITIONS = [
   {
-    name: 'scrub_video',
+    name: "scrub_video",
     description: `Process a YouTube video and extract its content as structured data.
 
 WHEN TO USE: Use this tool when you need to extract knowledge from a YouTube video - for creating documentation, understanding tutorials, extracting code examples, or building context from video content.
@@ -94,62 +98,67 @@ Use outputFormat to control what's returned:
 
 NOTE: Processing takes 1-5 minutes depending on video length. Use skipVisuals=true for faster processing.`,
     inputSchema: {
-      type: 'object' as const,
+      type: "object" as const,
       properties: {
         url: {
-          type: 'string',
-          description: 'YouTube video URL to process (e.g., https://youtube.com/watch?v=VIDEO_ID)',
+          type: "string",
+          description:
+            "YouTube video URL to process (e.g., https://youtube.com/watch?v=VIDEO_ID)",
         },
         skipVisuals: {
-          type: 'boolean',
+          type: "boolean",
           default: false,
-          description: 'Skip visual analysis for faster processing (default: false)',
+          description:
+            "Skip visual analysis for faster processing (default: false)",
         },
         transcriber: {
-          type: 'string',
+          type: "string",
           enum: [
-            'local-whisper',
-            'faster-whisper',
-            'openai',
-            'deepgram',
-            'youtube-captions',
+            "local-whisper",
+            "faster-whisper",
+            "openai",
+            "deepgram",
+            "youtube-captions",
           ],
-          description: 'Force a specific transcription adapter (optional - auto-selects best available)',
+          description:
+            "Force a specific transcription adapter (optional - auto-selects best available)",
         },
         outputFormat: {
-          type: 'string',
-          enum: ['full', 'summary', 'transcript'],
-          default: 'summary',
-          description: 'Output format (default: summary)',
+          type: "string",
+          enum: ["full", "summary", "transcript"],
+          default: "summary",
+          description: "Output format (default: summary)",
         },
         maxFrames: {
-          type: 'number',
+          type: "number",
           default: 20,
-          description: 'Maximum frames to analyze for visual content (default: 20)',
+          description:
+            "Maximum frames to analyze for visual content (default: 20)",
         },
         sceneThreshold: {
-          type: 'number',
+          type: "number",
           minimum: 0,
           maximum: 1,
           default: 0.4,
-          description: 'Scene detection sensitivity 0-1 (default: 0.4)',
+          description: "Scene detection sensitivity 0-1 (default: 0.4)",
         },
         generateSkill: {
-          type: 'boolean',
+          type: "boolean",
           default: false,
-          description: 'Generate SKILL.md from video content (default: false)',
+          description: "Generate SKILL.md from video content (default: false)",
         },
         skillName: {
-          type: 'string',
-          description: 'Custom skill name (auto-derived from title if not provided)',
+          type: "string",
+          description:
+            "Custom skill name (auto-derived from title if not provided)",
         },
       },
-      required: ['url'],
+      required: ["url"],
       additionalProperties: false,
     },
     // MCP tool annotations for behavior hints
     annotations: {
-      title: 'Process YouTube Video',
+      title: "Process YouTube Video",
       readOnlyHint: true, // Doesn't modify external state
       destructiveHint: false,
       idempotentHint: true, // Same URL produces same result
@@ -157,7 +166,7 @@ NOTE: Processing takes 1-5 minutes depending on video length. Use skipVisuals=tr
     },
   },
   {
-    name: 'scrub_doctor',
+    name: "scrub_doctor",
     description: `Check system prerequisites for scrub.
 
 WHEN TO USE: Run this FIRST if scrub_video fails, or to verify the system is properly configured before processing videos.
@@ -168,13 +177,13 @@ Returns diagnostic information about:
 - Available transcription adapters
 - Specific issues and recommendations to fix them`,
     inputSchema: {
-      type: 'object' as const,
+      type: "object" as const,
       properties: {},
       required: [],
       additionalProperties: false,
     },
     annotations: {
-      title: 'Check Scrub Prerequisites',
+      title: "Check Scrub Prerequisites",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -182,7 +191,7 @@ Returns diagnostic information about:
     },
   },
   {
-    name: 'list_transcribers',
+    name: "list_transcribers",
     description: `List available transcription adapters and their status.
 
 WHEN TO USE: Use to see which transcription methods are available, especially if you want to force a specific transcriber with scrub_video.
@@ -196,13 +205,13 @@ Returns an array of transcribers with:
 
 Transcribers are tried in priority order during processing.`,
     inputSchema: {
-      type: 'object' as const,
+      type: "object" as const,
       properties: {},
       required: [],
       additionalProperties: false,
     },
     annotations: {
-      title: 'List Transcription Adapters',
+      title: "List Transcription Adapters",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

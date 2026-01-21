@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
-import { config } from '../infrastructure/Config.js';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+import { config } from "../infrastructure/Config.js";
 
 /**
  * Simple file-based cache for transcripts and other data
@@ -24,7 +24,7 @@ export class Cache {
     }
 
     try {
-      const data = readFileSync(path, 'utf-8');
+      const data = readFileSync(path, "utf-8");
       return JSON.parse(data) as T;
     } catch {
       return null;
@@ -53,7 +53,7 @@ export class Cache {
   async delete(key: string): Promise<void> {
     const path = this.getPath(key);
     if (existsSync(path)) {
-      const { unlink } = await import('fs/promises');
+      const { unlink } = await import("fs/promises");
       await unlink(path);
     }
   }
@@ -63,7 +63,7 @@ export class Cache {
    */
   private getPath(key: string): string {
     // Sanitize key for filesystem
-    const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, "_");
     return join(this.cacheDir, `${safeKey}.json`);
   }
 

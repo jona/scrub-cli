@@ -1,7 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { config } from '../infrastructure/Config.js';
-import { logger } from '../utils/logger.js';
-import { formatTimestamp } from '../utils/helpers.js';
+import Anthropic from "@anthropic-ai/sdk";
+import { config } from "../infrastructure/Config.js";
+import { logger } from "../utils/logger.js";
+import { formatTimestamp } from "../utils/helpers.js";
 import type {
   VideoMetadata,
   VisualAnalysis,
@@ -20,8 +20,8 @@ import type {
   DifficultyAssessment,
   ReusabilityPrompts,
   ConfidenceScore,
-} from '../types/index.js';
-import type { TranscriptionResult } from '../transcription/ITranscriber.js';
+} from "../types/index.js";
+import type { TranscriptionResult } from "../transcription/ITranscriber.js";
 
 /**
  * Service for summarizing video content using Claude API
@@ -41,10 +41,10 @@ export class Summarizer {
    */
   private getClient(): Anthropic {
     if (!this.client) {
-      const apiKey = config.getApiKey('anthropic');
+      const apiKey = config.getApiKey("anthropic");
       if (!apiKey) {
         throw new Error(
-          'Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable.'
+          "Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable."
         );
       }
       this.client = new Anthropic({ apiKey });
@@ -64,10 +64,10 @@ export class Summarizer {
     }
   ): Promise<SummaryResult> {
     if (!this.isAvailable()) {
-      throw new Error('Anthropic API key not configured');
+      throw new Error("Anthropic API key not configured");
     }
 
-    options?.onProgress?.('Generating summary...');
+    options?.onProgress?.("Generating summary...");
 
     const client = this.getClient();
     const summarizerConfig = config.getSummarizer();
@@ -83,7 +83,7 @@ export class Summarizer {
       max_tokens: 8192,
       messages: [
         {
-          role: 'user',
+          role: "user",
           content: prompt,
         },
       ],
@@ -91,9 +91,9 @@ export class Summarizer {
 
     // Extract text response
     const responseText = response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
       .map((block) => block.text)
-      .join('\n');
+      .join("\n");
 
     // Parse the structured response
     return this.parseResponse(responseText, metadata);
@@ -110,7 +110,7 @@ export class Summarizer {
     // Format transcript with timestamps
     const formattedTranscript = transcript.segments
       .map((seg) => `[${formatTimestamp(seg.start)}] ${seg.text}`)
-      .join('\n');
+      .join("\n");
 
     // Format visual analyses
     const formattedVisuals = visuals
@@ -118,9 +118,9 @@ export class Summarizer {
         (v) =>
           `[${formatTimestamp(v.timestamp)}] (${v.visualType})\n` +
           `  Description: ${v.description}\n` +
-          (v.extractedText ? `  Text/Code: ${v.extractedText}` : '')
+          (v.extractedText ? `  Text/Code: ${v.extractedText}` : "")
       )
-      .join('\n\n');
+      .join("\n\n");
 
     return `You are creating a comprehensive knowledge artifact from a video. Think: "What would future-me or AI agents wish they had extracted without re-watching this video?"
 
@@ -129,13 +129,13 @@ export class Summarizer {
 - Channel: ${metadata.channelName}
 - Duration: ${formatTimestamp(metadata.duration)}
 - URL: ${metadata.url}
-${metadata.description ? `- Description: ${metadata.description.substring(0, 500)}${metadata.description.length > 500 ? '...' : ''}` : ''}
+${metadata.description ? `- Description: ${metadata.description.substring(0, 500)}${metadata.description.length > 500 ? "..." : ""}` : ""}
 
 ## TRANSCRIPT
 ${formattedTranscript}
 
 ## VISUAL CONTENT ANALYSIS
-${formattedVisuals || 'No visual analysis available.'}
+${formattedVisuals || "No visual analysis available."}
 
 ---
 
@@ -262,7 +262,7 @@ Respond with ONLY the JSON object, no additional text:`;
       // Extract JSON from response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        logger.warn('Could not find JSON in summary response');
+        logger.warn("Could not find JSON in summary response");
         return this.createFallbackSummary(metadata, responseText);
       }
 
@@ -270,10 +270,10 @@ Respond with ONLY the JSON object, no additional text:`;
 
       // Convert sections to our format
       const sections: SummarySection[] = (parsed.sections || []).map((s) => ({
-        title: s.title || 'Untitled Section',
+        title: s.title || "Untitled Section",
         startTime: s.startTime || 0,
         endTime: s.endTime || 0,
-        content: s.content || '',
+        content: s.content || "",
         visualContent: s.visualContent,
         codeSnippets: s.codeSnippets?.map((c) => ({
           language: c.language,
@@ -283,70 +283,84 @@ Respond with ONLY the JSON object, no additional text:`;
         })),
       }));
 
-      const codeSnippets: CodeBlock[] = (parsed.codeSnippets || []).map((c) => ({
-        language: c.language,
-        code: c.code,
-        timestamp: c.timestamp || 0,
-        context: c.context,
-      }));
+      const codeSnippets: CodeBlock[] = (parsed.codeSnippets || []).map(
+        (c) => ({
+          language: c.language,
+          code: c.code,
+          timestamp: c.timestamp || 0,
+          context: c.context,
+        })
+      );
 
       // Parse thesis and claims
       const thesisAndClaims: ThesisAndClaims = {
-        thesis: parsed.thesisAndClaims?.thesis || 'No thesis identified.',
+        thesis: parsed.thesisAndClaims?.thesis || "No thesis identified.",
         keyClaims: (parsed.thesisAndClaims?.keyClaims || []).map((c) => ({
-          claim: c.claim || '',
+          claim: c.claim || "",
           evidence: c.evidence,
         })),
         persuasionGoal: parsed.thesisAndClaims?.persuasionGoal,
       };
 
       // Parse actionable insights
-      const actionableInsights: ActionableInsight[] = (parsed.actionableInsights || []).map((a) => ({
-        action: a.action || '',
+      const actionableInsights: ActionableInsight[] = (
+        parsed.actionableInsights || []
+      ).map((a) => ({
+        action: a.action || "",
         context: a.context,
         rationale: a.rationale,
       }));
 
       // Parse concepts
-      const concepts: ConceptDefinition[] = (parsed.concepts || []).map((c) => ({
-        concept: c.concept || '',
-        definition: c.definition || '',
-        example: c.example,
-      }));
+      const concepts: ConceptDefinition[] = (parsed.concepts || []).map(
+        (c) => ({
+          concept: c.concept || "",
+          definition: c.definition || "",
+          example: c.example,
+        })
+      );
 
       // Parse mental models
-      const mentalModels: MentalModel[] = (parsed.mentalModels || []).map((m) => ({
-        name: m.name || '',
-        description: m.description || '',
-        whenToUse: m.whenToUse,
-        whyItWorks: m.whyItWorks,
-      }));
+      const mentalModels: MentalModel[] = (parsed.mentalModels || []).map(
+        (m) => ({
+          name: m.name || "",
+          description: m.description || "",
+          whenToUse: m.whenToUse,
+          whyItWorks: m.whyItWorks,
+        })
+      );
 
       // Parse structure map
-      const structureMap: StructureSection[] = (parsed.structureMap || []).map((s) => ({
-        number: s.number || 0,
-        type: s.type || 'section',
-        description: s.description || '',
-        timeRange: s.timeRange,
-      }));
+      const structureMap: StructureSection[] = (parsed.structureMap || []).map(
+        (s) => ({
+          number: s.number || 0,
+          type: s.type || "section",
+          description: s.description || "",
+          timeRange: s.timeRange,
+        })
+      );
 
       // Parse open questions
-      const openQuestions: OpenQuestion[] = (parsed.openQuestions || []).map((q) => ({
-        question: q.question || '',
-        type: (q.type as OpenQuestion['type']) || 'missing_data',
-        context: q.context,
-      }));
+      const openQuestions: OpenQuestion[] = (parsed.openQuestions || []).map(
+        (q) => ({
+          question: q.question || "",
+          type: (q.type as OpenQuestion["type"]) || "missing_data",
+          context: q.context,
+        })
+      );
 
       // Parse notable quotes
-      const notableQuotes: NotableQuote[] = (parsed.notableQuotes || []).map((q) => ({
-        quote: q.quote || '',
-        significance: q.significance || '',
-        timestamp: q.timestamp,
-      }));
+      const notableQuotes: NotableQuote[] = (parsed.notableQuotes || []).map(
+        (q) => ({
+          quote: q.quote || "",
+          significance: q.significance || "",
+          timestamp: q.timestamp,
+        })
+      );
 
       // Parse bias analysis
       const biasAnalysis: BiasAnalysis = {
-        perspective: parsed.biasAnalysis?.perspective || 'Not analyzed.',
+        perspective: parsed.biasAnalysis?.perspective || "Not analyzed.",
         possibleBiases: parsed.biasAnalysis?.possibleBiases || [],
         blindSpots: parsed.biasAnalysis?.blindSpots || [],
       };
@@ -362,14 +376,17 @@ Respond with ONLY the JSON object, no additional text:`;
 
       // Parse difficulty assessment
       const difficulty: DifficultyAssessment = {
-        level: (parsed.difficulty?.level as DifficultyAssessment['level']) || 'intermediate',
+        level:
+          (parsed.difficulty?.level as DifficultyAssessment["level"]) ||
+          "intermediate",
         prerequisites: parsed.difficulty?.prerequisites || [],
-        targetAudience: parsed.difficulty?.targetAudience || 'General audience',
+        targetAudience: parsed.difficulty?.targetAudience || "General audience",
       };
 
       // Parse reusability prompts
       const reusabilityPrompts: ReusabilityPrompts = {
-        explainToBeginnerPrompt: parsed.reusabilityPrompts?.explainToBeginnerPrompt,
+        explainToBeginnerPrompt:
+          parsed.reusabilityPrompts?.explainToBeginnerPrompt,
         checklistPrompt: parsed.reusabilityPrompts?.checklistPrompt,
         studyGuidePrompt: parsed.reusabilityPrompts?.studyGuidePrompt,
         flashcardsPrompt: parsed.reusabilityPrompts?.flashcardsPrompt,
@@ -377,14 +394,17 @@ Respond with ONLY the JSON object, no additional text:`;
 
       // Parse confidence score
       const confidence: ConfidenceScore = {
-        level: (parsed.confidence?.level as ConfidenceScore['level']) || 'medium',
-        reasoning: parsed.confidence?.reasoning || 'No confidence assessment available.',
+        level:
+          (parsed.confidence?.level as ConfidenceScore["level"]) || "medium",
+        reasoning:
+          parsed.confidence?.reasoning || "No confidence assessment available.",
       };
 
       return {
         title: metadata.title,
-        tldr: parsed.tldr || parsed.overview?.split('.')[0] || 'No TLDR available.',
-        overview: parsed.overview || 'No overview available.',
+        tldr:
+          parsed.tldr || parsed.overview?.split(".")[0] || "No TLDR available.",
+        overview: parsed.overview || "No overview available.",
         thesisAndClaims,
         actionableInsights,
         concepts,
@@ -403,7 +423,9 @@ Respond with ONLY the JSON object, no additional text:`;
         references: parsed.references || [],
       };
     } catch (error) {
-      logger.warn(`Failed to parse summary response: ${(error as Error).message}`);
+      logger.warn(
+        `Failed to parse summary response: ${(error as Error).message}`
+      );
       return this.createFallbackSummary(metadata, responseText);
     }
   }
@@ -417,10 +439,10 @@ Respond with ONLY the JSON object, no additional text:`;
   ): SummaryResult {
     return {
       title: metadata.title,
-      tldr: rawText.substring(0, 150) || 'Summary generation failed.',
-      overview: rawText.substring(0, 500) || 'Summary generation failed.',
+      tldr: rawText.substring(0, 150) || "Summary generation failed.",
+      overview: rawText.substring(0, 500) || "Summary generation failed.",
       thesisAndClaims: {
-        thesis: 'Unable to extract thesis.',
+        thesis: "Unable to extract thesis.",
         keyClaims: [],
         persuasionGoal: undefined,
       },
@@ -431,7 +453,7 @@ Respond with ONLY the JSON object, no additional text:`;
       openQuestions: [],
       notableQuotes: [],
       biasAnalysis: {
-        perspective: 'Not analyzed.',
+        perspective: "Not analyzed.",
         possibleBiases: [],
         blindSpots: [],
       },
@@ -443,21 +465,21 @@ Respond with ONLY the JSON object, no additional text:`;
         relationships: [],
       },
       difficulty: {
-        level: 'intermediate',
+        level: "intermediate",
         prerequisites: [],
-        targetAudience: 'General audience',
+        targetAudience: "General audience",
       },
       reusabilityPrompts: {},
       confidence: {
-        level: 'low',
-        reasoning: 'Parsing failed, limited extraction possible.',
+        level: "low",
+        reasoning: "Parsing failed, limited extraction possible.",
       },
       sections: [
         {
-          title: 'Full Content',
+          title: "Full Content",
           startTime: 0,
           endTime: metadata.duration,
-          content: rawText || 'Content unavailable.',
+          content: rawText || "Content unavailable.",
         },
       ],
       keyTakeaways: [],
@@ -477,10 +499,10 @@ Respond with ONLY the JSON object, no additional text:`;
     }
   ): Promise<string> {
     if (!this.isAvailable()) {
-      throw new Error('Anthropic API key not configured');
+      throw new Error("Anthropic API key not configured");
     }
 
-    options?.onProgress?.('Generating quick summary...');
+    options?.onProgress?.("Generating quick summary...");
 
     const client = this.getClient();
     const summarizerConfig = config.getSummarizer();
@@ -505,13 +527,13 @@ Write a clear, informative summary:`;
     const response = await client.messages.create({
       model: summarizerConfig.model,
       max_tokens: 2048,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: "user", content: prompt }],
     });
 
     return response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
       .map((block) => block.text)
-      .join('\n');
+      .join("\n");
   }
 }
 

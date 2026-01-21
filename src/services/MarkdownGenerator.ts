@@ -1,6 +1,6 @@
-import { writeFileSync } from 'fs';
-import { config } from '../infrastructure/Config.js';
-import { formatTimestamp, ensureParentDir } from '../utils/helpers.js';
+import { writeFileSync } from "fs";
+import { config } from "../infrastructure/Config.js";
+import { formatTimestamp, ensureParentDir } from "../utils/helpers.js";
 import type {
   VideoMetadata,
   SummaryResult,
@@ -18,8 +18,8 @@ import type {
   DifficultyAssessment,
   ReusabilityPrompts,
   ConfidenceScore,
-} from '../types/index.js';
-import type { TranscriptionResult } from '../transcription/ITranscriber.js';
+} from "../types/index.js";
+import type { TranscriptionResult } from "../transcription/ITranscriber.js";
 
 /**
  * Service for generating markdown output from video summaries
@@ -124,26 +124,29 @@ export class MarkdownGenerator {
     // Footer
     parts.push(this.generateFooter());
 
-    return parts.join('\n\n');
+    return parts.join("\n\n");
   }
 
   /**
    * Generate header section with metadata
    */
-  private generateHeader(metadata: VideoMetadata, summary: SummaryResult): string {
-    const difficultyBadge = summary.difficulty?.level 
+  private generateHeader(
+    metadata: VideoMetadata,
+    summary: SummaryResult
+  ): string {
+    const difficultyBadge = summary.difficulty?.level
       ? `**Difficulty:** ${this.capitalize(summary.difficulty.level)}`
-      : '';
+      : "";
     const confidenceBadge = summary.confidence?.level
       ? `**Confidence:** ${this.capitalize(summary.confidence.level)}`
-      : '';
-    
+      : "";
+
     return `# ${metadata.title}
 
 > **Source:** [${metadata.url}](${metadata.url})  
 > **Channel:** ${metadata.channelName}  
 > **Duration:** ${formatTimestamp(metadata.duration)}  
-> **Processed:** ${new Date().toISOString().split('T')[0]}  
+> **Processed:** ${new Date().toISOString().split("T")[0]}  
 > ${difficultyBadge} | ${confidenceBadge}`;
   }
 
@@ -171,10 +174,10 @@ ${overview}`;
   private generateThesisAndClaims(thesis: ThesisAndClaims): string {
     const claimsList = thesis.keyClaims
       .map((c) => {
-        const evidence = c.evidence ? ` *(${c.evidence})*` : '';
+        const evidence = c.evidence ? ` *(${c.evidence})*` : "";
         return `- ${c.claim}${evidence}`;
       })
-      .join('\n');
+      .join("\n");
 
     let content = `## Thesis & Key Claims
 
@@ -202,7 +205,7 @@ ${overview}`;
         if (i.rationale) item += `\n  - *Why:* ${i.rationale}`;
         return item;
       })
-      .join('\n');
+      .join("\n");
 
     return `## Actionable Insights
 
@@ -219,7 +222,7 @@ ${items}`;
         if (c.example) item += `\n\n*Example:* ${c.example}`;
         return item;
       })
-      .join('\n\n');
+      .join("\n\n");
 
     return `## Concepts & Definitions
 
@@ -237,7 +240,7 @@ ${items}`;
         if (m.whyItWorks) item += `\n\n**Why it works:** ${m.whyItWorks}`;
         return item;
       })
-      .join('\n\n');
+      .join("\n\n");
 
     return `## Mental Models & Frameworks
 
@@ -250,10 +253,10 @@ ${items}`;
   private generateStructureMap(structure: StructureSection[]): string {
     const items = structure
       .map((s) => {
-        const timeInfo = s.timeRange ? ` (${s.timeRange})` : '';
+        const timeInfo = s.timeRange ? ` (${s.timeRange})` : "";
         return `${s.number}. **${this.capitalize(s.type)}**${timeInfo}: ${s.description}`;
       })
-      .join('\n');
+      .join("\n");
 
     return `## Video Structure
 
@@ -265,33 +268,33 @@ ${items}`;
    */
   private generateOpenQuestions(questions: OpenQuestion[]): string {
     const grouped: Record<string, OpenQuestion[]> = {};
-    
+
     for (const q of questions) {
-      const type = q.type || 'other';
+      const type = q.type || "other";
       if (!grouped[type]) grouped[type] = [];
       grouped[type].push(q);
     }
 
     const typeLabels: Record<string, string> = {
-      assumption: 'Assumptions',
-      contradiction: 'Contradictions',
-      missing_data: 'Missing Data',
-      debate: 'Open Debates',
+      assumption: "Assumptions",
+      contradiction: "Contradictions",
+      missing_data: "Missing Data",
+      debate: "Open Debates",
     };
 
     const sections = Object.entries(grouped)
       .map(([type, qs]) => {
-        const label = typeLabels[type] || 'Other';
+        const label = typeLabels[type] || "Other";
         const items = qs
           .map((q) => {
             let item = `- ${q.question}`;
             if (q.context) item += ` *(${q.context})*`;
             return item;
           })
-          .join('\n');
+          .join("\n");
         return `**${label}:**\n${items}`;
       })
-      .join('\n\n');
+      .join("\n\n");
 
     return `## Open Questions & Contradictions
 
@@ -304,10 +307,12 @@ ${sections}`;
   private generateNotableQuotes(quotes: NotableQuote[]): string {
     const items = quotes
       .map((q) => {
-        const timestamp = q.timestamp ? ` *(${formatTimestamp(q.timestamp)})*` : '';
+        const timestamp = q.timestamp
+          ? ` *(${formatTimestamp(q.timestamp)})*`
+          : "";
         return `> "${q.quote}"${timestamp}\n>\n> **Why it matters:** ${q.significance}`;
       })
-      .join('\n\n');
+      .join("\n\n");
 
     return `## Notable Quotes
 
@@ -323,11 +328,11 @@ ${items}`;
 **Perspective:** ${bias.perspective}`;
 
     if (bias.possibleBiases.length > 0) {
-      content += `\n\n**Possible Biases:**\n${bias.possibleBiases.map((b) => `- ${b}`).join('\n')}`;
+      content += `\n\n**Possible Biases:**\n${bias.possibleBiases.map((b) => `- ${b}`).join("\n")}`;
     }
 
     if (bias.blindSpots.length > 0) {
-      content += `\n\n**Blind Spots (What's Not Being Said):**\n${bias.blindSpots.map((b) => `- ${b}`).join('\n')}`;
+      content += `\n\n**Blind Spots (What's Not Being Said):**\n${bias.blindSpots.map((b) => `- ${b}`).join("\n")}`;
     }
 
     return content;
@@ -340,24 +345,26 @@ ${items}`;
     const sections: string[] = [];
 
     if (graph.topics.length > 0) {
-      sections.push(`**Topics:** ${graph.topics.join(', ')}`);
+      sections.push(`**Topics:** ${graph.topics.join(", ")}`);
     }
     if (graph.people.length > 0) {
-      sections.push(`**People:** ${graph.people.join(', ')}`);
+      sections.push(`**People:** ${graph.people.join(", ")}`);
     }
     if (graph.tools.length > 0) {
-      sections.push(`**Tools:** ${graph.tools.join(', ')}`);
+      sections.push(`**Tools:** ${graph.tools.join(", ")}`);
     }
     if (graph.technologies.length > 0) {
-      sections.push(`**Technologies:** ${graph.technologies.join(', ')}`);
+      sections.push(`**Technologies:** ${graph.technologies.join(", ")}`);
     }
     if (graph.relationships.length > 0) {
-      sections.push(`**Relationships:**\n${graph.relationships.map((r) => `- ${r}`).join('\n')}`);
+      sections.push(
+        `**Relationships:**\n${graph.relationships.map((r) => `- ${r}`).join("\n")}`
+      );
     }
 
     return `## Knowledge Graph
 
-${sections.join('\n\n')}`;
+${sections.join("\n\n")}`;
   }
 
   /**
@@ -371,7 +378,7 @@ ${sections.join('\n\n')}`;
 **Target Audience:** ${difficulty.targetAudience}`;
 
     if (difficulty.prerequisites.length > 0) {
-      content += `\n\n**Prerequisites:**\n${difficulty.prerequisites.map((p) => `- ${p}`).join('\n')}`;
+      content += `\n\n**Prerequisites:**\n${difficulty.prerequisites.map((p) => `- ${p}`).join("\n")}`;
     }
 
     return content;
@@ -384,16 +391,24 @@ ${sections.join('\n\n')}`;
     const promptList: string[] = [];
 
     if (prompts.explainToBeginnerPrompt) {
-      promptList.push(`**Explain to a Beginner:**\n\`\`\`\n${prompts.explainToBeginnerPrompt}\n\`\`\``);
+      promptList.push(
+        `**Explain to a Beginner:**\n\`\`\`\n${prompts.explainToBeginnerPrompt}\n\`\`\``
+      );
     }
     if (prompts.checklistPrompt) {
-      promptList.push(`**Create a Checklist:**\n\`\`\`\n${prompts.checklistPrompt}\n\`\`\``);
+      promptList.push(
+        `**Create a Checklist:**\n\`\`\`\n${prompts.checklistPrompt}\n\`\`\``
+      );
     }
     if (prompts.studyGuidePrompt) {
-      promptList.push(`**Create a Study Guide:**\n\`\`\`\n${prompts.studyGuidePrompt}\n\`\`\``);
+      promptList.push(
+        `**Create a Study Guide:**\n\`\`\`\n${prompts.studyGuidePrompt}\n\`\`\``
+      );
     }
     if (prompts.flashcardsPrompt) {
-      promptList.push(`**Generate Flashcards:**\n\`\`\`\n${prompts.flashcardsPrompt}\n\`\`\``);
+      promptList.push(
+        `**Generate Flashcards:**\n\`\`\`\n${prompts.flashcardsPrompt}\n\`\`\``
+      );
     }
 
     if (promptList.length === 0) {
@@ -404,7 +419,7 @@ ${sections.join('\n\n')}`;
 
     return `## Reusability Prompts
 
-${promptList.join('\n\n')}`;
+${promptList.join("\n\n")}`;
   }
 
   /**
@@ -437,7 +452,7 @@ ${promptList.join('\n\n')}`;
 
     return `## Table of Contents
 
-${links.join('\n')}`;
+${links.join("\n")}`;
   }
 
   /**
@@ -459,7 +474,7 @@ ${section.content}`;
       if (section.codeSnippets && section.codeSnippets.length > 0) {
         const codeBlocks = section.codeSnippets
           .map((code) => this.formatCodeBlock(code))
-          .join('\n\n');
+          .join("\n\n");
         content += `\n\n${codeBlocks}`;
       }
 
@@ -468,14 +483,14 @@ ${section.content}`;
 
     return `## Content
 
-${sectionParts.join('\n\n---\n\n')}`;
+${sectionParts.join("\n\n---\n\n")}`;
   }
 
   /**
    * Generate key takeaways section
    */
   private generateKeyTakeaways(takeaways: string[]): string {
-    const items = takeaways.map((t) => `- ${t}`).join('\n');
+    const items = takeaways.map((t) => `- ${t}`).join("\n");
     return `## Key Takeaways
 
 ${items}`;
@@ -493,7 +508,7 @@ ${items}`;
 
         return `${header}\n\n${this.formatCodeBlock(snippet)}`;
       })
-      .join('\n\n---\n\n');
+      .join("\n\n---\n\n");
 
     return `## Code Snippets
 
@@ -504,7 +519,7 @@ ${codeBlocks}`;
    * Format a single code block
    */
   private formatCodeBlock(code: CodeBlock): string {
-    const language = code.language || '';
+    const language = code.language || "";
     return `\`\`\`${language}
 ${code.code}
 \`\`\``;
@@ -514,13 +529,15 @@ ${code.code}
    * Generate references section
    */
   private generateReferences(references: string[]): string {
-    const items = references.map((r) => {
-      // Try to detect if it's a URL
-      if (r.match(/^https?:\/\//)) {
-        return `- [${r}](${r})`;
-      }
-      return `- ${r}`;
-    }).join('\n');
+    const items = references
+      .map((r) => {
+        // Try to detect if it's a URL
+        if (r.match(/^https?:\/\//)) {
+          return `- [${r}](${r})`;
+        }
+        return `- ${r}`;
+      })
+      .join("\n");
 
     return `## References & Resources
 
@@ -540,7 +557,7 @@ ${items}`;
 <details>
 <summary>Click to expand full transcript</summary>
 
-${lines.join('\n\n')}
+${lines.join("\n\n")}
 
 </details>`;
   }
@@ -560,9 +577,9 @@ ${lines.join('\n\n')}
   private slugify(text: string): string {
     return text
       .toLowerCase()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
+      .replace(/[^\w\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
       .trim();
   }
 
@@ -571,7 +588,7 @@ ${lines.join('\n\n')}
    */
   save(content: string, outputPath: string): void {
     ensureParentDir(outputPath);
-    writeFileSync(outputPath, content, 'utf-8');
+    writeFileSync(outputPath, content, "utf-8");
   }
 
   /**
@@ -590,7 +607,7 @@ ${lines.join('\n\n')}
 
 ## Summary
 
-${summary || 'No summary available.'}
+${summary || "No summary available."}
 
 ## Transcript
 

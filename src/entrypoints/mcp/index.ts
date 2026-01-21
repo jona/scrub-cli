@@ -7,30 +7,27 @@
  * via the Model Context Protocol (MCP).
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   type CallToolRequest,
-} from '@modelcontextprotocol/sdk/types.js';
+} from "@modelcontextprotocol/sdk/types.js";
 
-import { videoProcessor } from '../../core/VideoProcessor.js';
-import { transcriberFactory } from '../../transcription/index.js';
-import {
-  TOOL_DEFINITIONS,
-  ScrubVideoInputSchema,
-} from './tools.js';
+import { videoProcessor } from "../../core/VideoProcessor.js";
+import { transcriberFactory } from "../../transcription/index.js";
+import { TOOL_DEFINITIONS, ScrubVideoInputSchema } from "./tools.js";
 import {
   formatOutput,
   formatDiagnostics,
   formatTranscriberList,
-} from './formatters.js';
-import type { TranscriptionSource } from '../../transcription/ITranscriber.js';
+} from "./formatters.js";
+import type { TranscriptionSource } from "../../transcription/ITranscriber.js";
 
 // Suppress console logging in MCP mode - must be set before logger is used
 // The logger checks this env var to avoid polluting stdout (JSON-RPC channel)
-process.env.SCRUB_QUIET = 'true';
+process.env.SCRUB_QUIET = "true";
 
 /**
  * Log to stderr (safe in MCP - doesn't interfere with JSON-RPC on stdout)
@@ -76,8 +73,8 @@ function withTimeout<T>(
 function createServer(): Server {
   const server = new Server(
     {
-      name: 'scrub',
-      version: '1.0.0',
+      name: "scrub",
+      version: "1.0.0",
     },
     {
       capabilities: {
@@ -99,45 +96,48 @@ function createServer(): Server {
   });
 
   // Register tool call handler
-  server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest) => {
-    const { name, arguments: args } = request.params;
+  server.setRequestHandler(
+    CallToolRequestSchema,
+    async (request: CallToolRequest) => {
+      const { name, arguments: args } = request.params;
 
-    try {
-      switch (name) {
-        case 'scrub_video':
-          return await handleScrubVideo(args ?? {});
+      try {
+        switch (name) {
+          case "scrub_video":
+            return await handleScrubVideo(args ?? {});
 
-        case 'scrub_doctor':
-          return await handleScrubDoctor();
+          case "scrub_doctor":
+            return await handleScrubDoctor();
 
-        case 'list_transcribers':
-          return await handleListTranscribers();
+          case "list_transcribers":
+            return await handleListTranscribers();
 
-        default:
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify({ error: `Unknown tool: ${name}` }),
-              },
-            ],
-            isError: true,
-          };
+          default:
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify({ error: `Unknown tool: ${name}` }),
+                },
+              ],
+              isError: true,
+            };
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`Error in tool ${name}: ${message}`);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({ error: message }),
+            },
+          ],
+          isError: true,
+        };
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      log(`Error in tool ${name}: ${message}`);
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({ error: message }),
-          },
-        ],
-        isError: true,
-      };
     }
-  });
+  );
 
   return server;
 }
@@ -152,9 +152,9 @@ async function handleScrubVideo(input: unknown) {
     return {
       content: [
         {
-          type: 'text' as const,
+          type: "text" as const,
           text: JSON.stringify({
-            error: 'Invalid input',
+            error: "Invalid input",
             details: parsed.error.format(),
           }),
         },
@@ -163,24 +163,32 @@ async function handleScrubVideo(input: unknown) {
     };
   }
 
-  const { url, skipVisuals, transcriber, outputFormat, maxFrames, sceneThreshold, generateSkill, skillName } =
-    parsed.data;
+  const {
+    url,
+    skipVisuals,
+    transcriber,
+    outputFormat,
+    maxFrames,
+    sceneThreshold,
+    generateSkill,
+    skillName,
+  } = parsed.data;
 
   log(`Processing video: ${url}`);
 
   // Check prerequisites first
   const prereqs = await videoProcessor.checkPrerequisites();
   if (!prereqs.ready) {
-    log(`Prerequisites not met: ${prereqs.missing.join(', ')}`);
+    log(`Prerequisites not met: ${prereqs.missing.join(", ")}`);
     return {
       content: [
         {
-          type: 'text' as const,
+          type: "text" as const,
           text: JSON.stringify({
-            error: 'Prerequisites not met',
+            error: "Prerequisites not met",
             missing: prereqs.missing,
             warnings: prereqs.warnings,
-            suggestion: 'Run scrub_doctor to see full diagnostics',
+            suggestion: "Run scrub_doctor to see full diagnostics",
           }),
         },
       ],
@@ -202,18 +210,18 @@ async function handleScrubVideo(input: unknown) {
       },
     }),
     VIDEO_PROCESSING_TIMEOUT_MS,
-    'Video processing'
+    "Video processing"
   );
 
   log(`Completed processing: ${result.metadata.title}`);
 
   // Format output based on requested format
-  const formatted = formatOutput(result, outputFormat ?? 'summary');
+  const formatted = formatOutput(result, outputFormat ?? "summary");
 
   return {
     content: [
       {
-        type: 'text' as const,
+        type: "text" as const,
         text: JSON.stringify(formatted, null, 2),
       },
     ],
@@ -224,15 +232,15 @@ async function handleScrubVideo(input: unknown) {
  * Handle scrub_doctor tool call
  */
 async function handleScrubDoctor() {
-  log('Running diagnostics...');
+  log("Running diagnostics...");
   const diagnostics = await videoProcessor.getDiagnostics();
   const formatted = formatDiagnostics(diagnostics);
-  log(`Diagnostics complete: ${formatted.ready ? 'ready' : 'issues found'}`);
+  log(`Diagnostics complete: ${formatted.ready ? "ready" : "issues found"}`);
 
   return {
     content: [
       {
-        type: 'text' as const,
+        type: "text" as const,
         text: JSON.stringify(formatted, null, 2),
       },
     ],
@@ -243,7 +251,7 @@ async function handleScrubDoctor() {
  * Handle list_transcribers tool call
  */
 async function handleListTranscribers() {
-  log('Listing transcribers...');
+  log("Listing transcribers...");
   const transcribers = await transcriberFactory.getDiagnostics();
   const formatted = formatTranscriberList(transcribers);
   const available = formatted.filter((t) => t.available).length;
@@ -252,7 +260,7 @@ async function handleListTranscribers() {
   return {
     content: [
       {
-        type: 'text' as const,
+        type: "text" as const,
         text: JSON.stringify(formatted, null, 2),
       },
     ],
@@ -263,23 +271,23 @@ async function handleListTranscribers() {
  * Main entry point
  */
 async function main() {
-  log('Starting scrub MCP server...');
-  
+  log("Starting scrub MCP server...");
+
   const server = createServer();
   const transport = new StdioServerTransport();
 
   await server.connect(transport);
-  log('Server connected and ready');
+  log("Server connected and ready");
 
   // Handle graceful shutdown
-  process.on('SIGINT', async () => {
-    log('Received SIGINT, shutting down...');
+  process.on("SIGINT", async () => {
+    log("Received SIGINT, shutting down...");
     await server.close();
     process.exit(0);
   });
 
-  process.on('SIGTERM', async () => {
-    log('Received SIGTERM, shutting down...');
+  process.on("SIGTERM", async () => {
+    log("Received SIGTERM, shutting down...");
     await server.close();
     process.exit(0);
   });
