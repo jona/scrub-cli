@@ -305,7 +305,7 @@ export interface SummaryResult {
  * Processing progress information
  */
 export interface ProcessingProgress {
-  stage: 'download' | 'transcribe' | 'scene-detect' | 'visual-analyze' | 'summarize' | 'generate';
+  stage: 'download' | 'transcribe' | 'scene-detect' | 'visual-analyze' | 'summarize' | 'generate' | 'skill-generate';
   progress: number;
   message: string;
 }
@@ -314,3 +314,43 @@ export interface ProcessingProgress {
  * Callback for progress updates
  */
 export type ProgressCallback = (progress: ProcessingProgress) => void;
+
+/**
+ * Source type for skill checklist items
+ */
+export type SkillSourceType = 'summary' | 'transcript' | 'inferred' | null;
+
+/**
+ * Individual checklist item for skill coverage assessment
+ */
+export interface SkillChecklistItem {
+  covered: boolean;
+  source: SkillSourceType;
+  gaps?: string[];
+}
+
+/**
+ * Checklist assessing what skill components can be derived from video content
+ */
+export interface SkillChecklist {
+  name: SkillChecklistItem;
+  description: SkillChecklistItem;
+  triggerScenarios: SkillChecklistItem;
+  domainKnowledge: SkillChecklistItem;
+  workflows: SkillChecklistItem;
+  examples: SkillChecklistItem;
+  codeSnippets: SkillChecklistItem;
+  templates: SkillChecklistItem;
+}
+
+/**
+ * Result from skill generation
+ */
+export interface SkillGenerationResult {
+  /** The generated SKILL.md content */
+  skillMd: string;
+  /** Checklist of skill components covered */
+  checklist: SkillChecklist;
+  /** Suggested skill name derived from video */
+  suggestedName: string;
+}

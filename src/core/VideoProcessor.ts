@@ -1,4 +1,5 @@
 import { join } from "path";
+import { writeFileSync } from "fs";
 import { config } from "../infrastructure/Config.js";
 import { logger } from "../utils/logger.js";
 import {
@@ -12,11 +13,13 @@ import { sceneDetector } from "../services/SceneDetector.js";
 import { visualAnalyzer } from "../services/VisualAnalyzer.js";
 import { summarizer } from "../services/Summarizer.js";
 import { markdownGenerator } from "../services/MarkdownGenerator.js";
+import { skillGenerator } from "../services/SkillGenerator.js";
 import type {
   VideoMetadata,
   VisualAnalysis,
   SummaryResult,
   ProgressCallback,
+  SkillGenerationResult,
 } from "../types/index.js";
 import type {
   TranscriptionResult,
@@ -37,6 +40,10 @@ export interface ProcessOptions {
   sceneThreshold?: number;
   /** Maximum frames to analyze */
   maxFrames?: number;
+  /** Generate SKILL.md from video content */
+  generateSkill?: boolean;
+  /** Custom skill name (auto-derived from title if not provided) */
+  skillName?: string;
   /** Progress callback */
   onProgress?: ProgressCallback;
   /** Verbose logging */
@@ -53,11 +60,16 @@ export interface ProcessResult {
   summary: SummaryResult;
   markdown: string;
   outputPath: string;
+  /** Path to generated SKILL.md (if requested) */
+  skillPath?: string;
+  /** Generated skill result (if requested) */
+  skillResult?: SkillGenerationResult;
   stats: {
     downloadTime: number;
     transcriptionTime: number;
     visualAnalysisTime: number;
     summarizationTime: number;
+    skillGenerationTime?: number;
     totalTime: number;
   };
 }
@@ -74,11 +86,12 @@ export class VideoProcessor {
     options: ProcessOptions = {},
   ): Promise<ProcessResult> {
     const startTime = Date.now();
-    const stats = {
+    const stats: ProcessResult["stats"] = {
       downloadTime: 0,
       transcriptionTime: 0,
       visualAnalysisTime: 0,
       summarizationTime: 0,
+      skillGenerationTime: undefined,
       totalTime: 0,
     };
 
@@ -102,7 +115,8 @@ export class VideoProcessor {
       | "scene-detect"
       | "visual-analyze"
       | "summarize"
-      | "generate";
+      | "generate"
+      | "skill-generate";
 
     // Progress helper
     const progress = (
@@ -215,6 +229,46 @@ export class VideoProcessor {
       // Save the markdown file
       markdownGenerator.save(markdown, outputPath);
 
+      // Step 6: Generate skill (optional)
+      let skillPath: string | undefined;
+      let skillResult: SkillGenerationResult | undefined;
+
+      if (options.generateSkill) {
+        progress("skill-generate", 6, 6, "Generating SKILL.md...");
+        const skillStart = Date.now();
+
+        try {
+          skillResult = await skillGenerator.generate(
+            download.metadata,
+            summary,
+            {
+              skillName: options.skillName,
+              transcript,
+              onProgress: (msg) => progress("skill-generate", 6, 6, msg),
+            },
+          );
+
+          // Save skill to subdirectory: {outputDir}/{title}/SKILL.md
+          const skillDir = this.resolveSkillOutputDir(
+            download.metadata,
+            skillResult.suggestedName,
+          );
+          ensureDir(skillDir);
+          skillPath = join(skillDir, "SKILL.md");
+          writeFileSync(skillPath, skillResult.skillMd, "utf-8");
+
+          stats.skillGenerationTime = Date.now() - skillStart;
+          logger.debug(
+            `Skill generation completed in ${stats.skillGenerationTime}ms`,
+          );
+        } catch (error) {
+          // Warn and continue - skill generation is optional
+          const err = error as Error;
+          logger.warn(`Skill generation failed: ${err.message}`);
+          stats.skillGenerationTime = Date.now() - skillStart;
+        }
+      }
+
       stats.totalTime = Date.now() - startTime;
 
       logger.debug(`Total processing time: ${stats.totalTime}ms`);
@@ -226,6 +280,8 @@ export class VideoProcessor {
         summary,
         markdown,
         outputPath,
+        skillPath,
+        skillResult,
         stats,
       };
     } catch (error) {
@@ -251,6 +307,19 @@ export class VideoProcessor {
 
     const filename = sanitizeFilename(metadata.title) || metadata.videoId;
     return join(outputDir, `${filename}.md`);
+  }
+
+  /**
+   * Resolve the skill output directory
+   * Output: {outputDir}/{skillName}/SKILL.md
+   */
+  private resolveSkillOutputDir(
+    metadata: VideoMetadata,
+    skillName: string,
+  ): string {
+    const outputDir = config.getOutputDir();
+    const dirName = sanitizeFilename(skillName) || metadata.videoId;
+    return join(outputDir, dirName);
   }
 
   /**

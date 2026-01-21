@@ -9,8 +9,11 @@ dist/
 .env.local
 
 # Cache and output directories
-cache/
-output/
+.cache/
+.output/
+
+# Skill directories
+.skills/
 
 # OS files
 .DS_Store

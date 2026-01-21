@@ -1,7 +1,7 @@
-import { z } from 'zod';
-import { readFileSync, existsSync } from 'fs';
-import { resolve } from 'path';
-import dotenv from 'dotenv';
+import { z } from "zod";
+import { readFileSync, existsSync } from "fs";
+import { resolve } from "path";
+import dotenv from "dotenv";
 
 // Load environment variables
 dotenv.config();
@@ -13,23 +13,18 @@ const TranscriptionConfigSchema = z.object({
   priority: z
     .array(
       z.enum([
-        'local-whisper',
-        'faster-whisper',
-        'openai',
-        'deepgram',
-        'youtube-captions',
-      ])
+        "faster-whisper",
+        "local-whisper",
+        "openai",
+        "deepgram",
+        "youtube-captions",
+      ]),
     )
-    .default([
-      'local-whisper',
-      'faster-whisper',
-      'openai',
-      'youtube-captions',
-    ]),
+    .default(["faster-whisper", "local-whisper", "openai", "youtube-captions"]),
   whisperModel: z
-    .enum(['tiny', 'base', 'small', 'medium', 'large'])
-    .default('base'),
-  language: z.string().default('en'),
+    .enum(["tiny", "base", "small", "medium", "large"])
+    .default("base"),
+  language: z.string().default("en"),
 });
 
 /**
@@ -39,21 +34,21 @@ const VisualConfigSchema = z.object({
   enabled: z.boolean().default(true),
   sceneThreshold: z.number().min(0).max(1).default(0.4),
   maxFrames: z.number().min(1).max(100).default(20),
-  model: z.string().default('claude-sonnet-4-20250514'),
+  model: z.string().default("claude-opus-4-5-20251101"),
 });
 
 /**
  * Schema for summarizer configuration
  */
 const SummarizerConfigSchema = z.object({
-  model: z.string().default('claude-sonnet-4-20250514'),
+  model: z.string().default("claude-opus-4-5-20251101"),
 });
 
 /**
  * Schema for output configuration
  */
 const OutputConfigSchema = z.object({
-  directory: z.string().default('./output'),
+  directory: z.string().default("./output"),
   includeFullTranscript: z.boolean().default(false),
 });
 
@@ -88,26 +83,21 @@ export type OutputConfig = z.infer<typeof OutputConfigSchema>;
  */
 const DEFAULT_CONFIG: Config = {
   transcription: {
-    priority: [
-      'local-whisper',
-      'faster-whisper',
-      'openai',
-      'youtube-captions',
-    ],
-    whisperModel: 'base',
-    language: 'en',
+    priority: ["faster-whisper", "local-whisper", "openai", "youtube-captions"],
+    whisperModel: "base",
+    language: "en",
   },
   visual: {
     enabled: true,
     sceneThreshold: 0.4,
     maxFrames: 20,
-    model: 'claude-sonnet-4-20250514',
+    model: "claude-opus-4-5-20251101",
   },
   summarizer: {
-    model: 'claude-sonnet-4-20250514',
+    model: "claude-opus-4-5-20251101",
   },
   output: {
-    directory: './output',
+    directory: "./.output",
     includeFullTranscript: false,
   },
   apis: {},
@@ -132,14 +122,14 @@ class ConfigManager {
 
     // Try to load from scrub.config.json
     const configPaths = [
-      resolve(process.cwd(), 'scrub.config.json'),
-      resolve(process.cwd(), '.scrubrc.json'),
+      resolve(process.cwd(), "scrub.config.json"),
+      resolve(process.cwd(), ".scrubrc.json"),
     ];
 
     for (const configPath of configPaths) {
       if (existsSync(configPath)) {
         try {
-          const raw = readFileSync(configPath, 'utf-8');
+          const raw = readFileSync(configPath, "utf-8");
           fileConfig = JSON.parse(raw);
           this.configPath = configPath;
           break;
@@ -162,16 +152,13 @@ class ConfigManager {
     if (process.env.SCRUB_OUTPUT_DIR) {
       envConfig.output = {
         directory: process.env.SCRUB_OUTPUT_DIR,
-        includeFullTranscript: fileConfig.output?.includeFullTranscript ?? false,
+        includeFullTranscript:
+          fileConfig.output?.includeFullTranscript ?? false,
       };
     }
 
     // Deep merge: defaults < file config < env config
-    const merged = this.deepMerge(
-      DEFAULT_CONFIG,
-      fileConfig,
-      envConfig
-    );
+    const merged = this.deepMerge(DEFAULT_CONFIG, fileConfig, envConfig);
 
     // Validate and return
     return ConfigSchema.parse(merged);
@@ -188,13 +175,13 @@ class ConfigManager {
         const value = (obj as Record<string, unknown>)[key];
         if (
           value !== undefined &&
-          typeof value === 'object' &&
+          typeof value === "object" &&
           value !== null &&
           !Array.isArray(value)
         ) {
           result[key] = this.deepMerge(
             (result[key] as Partial<Config>) || {},
-            value as Partial<Config>
+            value as Partial<Config>,
           );
         } else if (value !== undefined) {
           result[key] = value;
@@ -243,7 +230,7 @@ class ConfigManager {
   /**
    * Get API key for a service
    */
-  getApiKey(service: 'anthropic' | 'openai' | 'deepgram'): string | undefined {
+  getApiKey(service: "anthropic" | "openai" | "deepgram"): string | undefined {
     return this.config.apis[service];
   }
 
@@ -265,7 +252,7 @@ class ConfigManager {
    * Get cache directory path
    */
   getCacheDir(): string {
-    return process.env.SCRUB_CACHE_DIR || resolve(process.cwd(), 'cache');
+    return process.env.SCRUB_CACHE_DIR || resolve(process.cwd(), ".cache");
   }
 
   /**

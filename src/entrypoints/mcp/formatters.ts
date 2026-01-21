@@ -45,6 +45,12 @@ export interface SummaryOutput {
     context?: string;
   }>;
   references: string[];
+  /** Generated SKILL.md content (if generateSkill was true) */
+  skill?: {
+    name: string;
+    path: string;
+    content: string;
+  };
 }
 
 /**
@@ -84,7 +90,7 @@ export function formatOutput(
  * Format as summary - sections, takeaways, code snippets
  */
 function formatSummary(result: ProcessResult): SummaryOutput {
-  return {
+  const output: SummaryOutput = {
     title: result.metadata.title,
     source: result.metadata.url,
     channel: result.metadata.channelName,
@@ -108,6 +114,17 @@ function formatSummary(result: ProcessResult): SummaryOutput {
     })),
     references: result.summary.references,
   };
+
+  // Include skill if generated
+  if (result.skillResult && result.skillPath) {
+    output.skill = {
+      name: result.skillResult.suggestedName,
+      path: result.skillPath,
+      content: result.skillResult.skillMd,
+    };
+  }
+
+  return output;
 }
 
 /**

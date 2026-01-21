@@ -35,6 +35,8 @@ program
     'Maximum frames to analyze',
     parseInt
   )
+  .option('--output-skill', 'Generate SKILL.md from video content')
+  .option('--skill-name <name>', 'Custom skill name (auto-derived from title if not provided)')
   .option('-v, --verbose', 'Show detailed progress')
   .option('--dry-run', 'Check prerequisites without processing')
   .action(async (url: string, options) => {
@@ -99,6 +101,8 @@ program
         transcriber: options.transcriber as TranscriptionSource | undefined,
         sceneThreshold: options.sceneThreshold,
         maxFrames: options.maxFrames,
+        generateSkill: options.outputSkill,
+        skillName: options.skillName,
         verbose: options.verbose,
         onProgress: (progress) => {
           logger.updateSpinner(progress.message);
@@ -127,6 +131,10 @@ program
 
       logger.newline();
       logger.success(`Summary saved to: ${fmt.path(result.outputPath)}`);
+
+      if (result.skillPath) {
+        logger.success(`Skill saved to: ${fmt.path(result.skillPath)}`);
+      }
     } catch (error) {
       logger.stopSpinnerFail('Processing failed');
       logger.error((error as Error).message);

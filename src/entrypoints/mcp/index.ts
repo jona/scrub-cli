@@ -163,7 +163,7 @@ async function handleScrubVideo(input: unknown) {
     };
   }
 
-  const { url, skipVisuals, transcriber, outputFormat, maxFrames, sceneThreshold } =
+  const { url, skipVisuals, transcriber, outputFormat, maxFrames, sceneThreshold, generateSkill, skillName } =
     parsed.data;
 
   log(`Processing video: ${url}`);
@@ -195,6 +195,8 @@ async function handleScrubVideo(input: unknown) {
       transcriber: transcriber as TranscriptionSource | undefined,
       maxFrames,
       sceneThreshold,
+      generateSkill,
+      skillName,
       onProgress: (progress) => {
         log(`[${progress.stage}] ${progress.message}`);
       },

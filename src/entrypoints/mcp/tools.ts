@@ -45,6 +45,15 @@ export const ScrubVideoInputSchema = z.object({
     .max(1)
     .optional()
     .describe('Scene detection sensitivity (0-1)'),
+  generateSkill: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('Generate SKILL.md alongside regular output - creates a reusable AI agent skill from the video content'),
+  skillName: z
+    .string()
+    .optional()
+    .describe('Custom skill name (auto-derived from video title if not provided)'),
 });
 
 export type ScrubVideoInput = z.infer<typeof ScrubVideoInputSchema>;
@@ -124,6 +133,15 @@ NOTE: Processing takes 1-5 minutes depending on video length. Use skipVisuals=tr
           maximum: 1,
           default: 0.4,
           description: 'Scene detection sensitivity 0-1 (default: 0.4)',
+        },
+        generateSkill: {
+          type: 'boolean',
+          default: false,
+          description: 'Generate SKILL.md from video content (default: false)',
+        },
+        skillName: {
+          type: 'string',
+          description: 'Custom skill name (auto-derived from title if not provided)',
         },
       },
       required: ['url'],
