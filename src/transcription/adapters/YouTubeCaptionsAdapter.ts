@@ -6,7 +6,7 @@ import type {
   TranscriptionResult,
   TranscriptionOptions,
   TranscriptSegment,
-} from './ITranscriber.js';
+} from '../ITranscriber.js';
 
 /**
  * Adapter for fetching YouTube's built-in captions/subtitles

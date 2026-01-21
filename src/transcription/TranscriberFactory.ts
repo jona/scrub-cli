@@ -1,16 +1,16 @@
-import { config } from '../../infrastructure/Config.js';
-import { logger } from '../../utils/logger.js';
+import { config } from '../infrastructure/Config.js';
+import { logger } from '../utils/logger.js';
 import type {
   ITranscriber,
   TranscriptionResult,
   TranscriptionOptions,
   TranscriptionSource,
 } from './ITranscriber.js';
-import { LocalWhisperAdapter } from './LocalWhisperAdapter.js';
-import { FasterWhisperAdapter } from './FasterWhisperAdapter.js';
-import { OpenAIWhisperAdapter } from './OpenAIWhisperAdapter.js';
-import { DeepgramAdapter } from './DeepgramAdapter.js';
-import { YouTubeCaptionsAdapter } from './YouTubeCaptionsAdapter.js';
+import { LocalWhisperAdapter } from './adapters/LocalWhisperAdapter.js';
+import { FasterWhisperAdapter } from './adapters/FasterWhisperAdapter.js';
+import { OpenAIWhisperAdapter } from './adapters/OpenAIWhisperAdapter.js';
+import { DeepgramAdapter } from './adapters/DeepgramAdapter.js';
+import { YouTubeCaptionsAdapter } from './adapters/YouTubeCaptionsAdapter.js';
 
 /**
  * Factory for creating and managing transcription adapters

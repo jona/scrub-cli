@@ -21,7 +21,7 @@ import type {
   ReusabilityPrompts,
   ConfidenceScore,
 } from '../types/index.js';
-import type { TranscriptionResult } from '../adapters/transcription/ITranscriber.js';
+import type { TranscriptionResult } from '../transcription/ITranscriber.js';
 
 /**
  * Service for summarizing video content using Claude API

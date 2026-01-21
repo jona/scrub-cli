@@ -7,7 +7,7 @@ import type {
   TranscriptionResult,
   TranscriptionOptions,
   TranscriptSegment,
-} from './ITranscriber.js';
+} from '../ITranscriber.js';
 
 /**
  * Adapter for Deepgram Speech-to-Text API

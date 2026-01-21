@@ -1,15 +1,15 @@
 import { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
-import { config } from '../../infrastructure/Config.js';
-import { logger } from '../../utils/logger.js';
+import { config } from '../infrastructure/Config.js';
+import { logger } from '../utils/logger.js';
 import {
   execAsync,
   commandExists,
   extractVideoId,
   ensureDir,
   runCommand,
-} from '../../utils/helpers.js';
-import type { VideoMetadata, DownloadResult } from '../../types/index.js';
+} from '../utils/helpers.js';
+import type { VideoMetadata, DownloadResult } from '../types/index.js';
 
 /**
  * Raw metadata from yt-dlp --dump-json

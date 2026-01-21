@@ -9,7 +9,7 @@ import type {
   TranscriptionResult,
   TranscriptionOptions,
   TranscriptSegment,
-} from './ITranscriber.js';
+} from '../ITranscriber.js';
 
 /**
  * Adapter for local Whisper transcription using whisper.cpp

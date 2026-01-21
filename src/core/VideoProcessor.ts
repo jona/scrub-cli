@@ -1,23 +1,27 @@
-import { join } from 'path';
-import { config } from '../infrastructure/Config.js';
-import { logger } from '../utils/logger.js';
-import { extractVideoId, sanitizeFilename, ensureDir } from '../utils/helpers.js';
-import { videoDownloader } from '../adapters/download/VideoDownloader.js';
-import { transcriberFactory } from '../adapters/transcription/index.js';
-import { sceneDetector } from '../services/SceneDetector.js';
-import { visualAnalyzer } from '../services/VisualAnalyzer.js';
-import { summarizer } from '../services/Summarizer.js';
-import { markdownGenerator } from '../services/MarkdownGenerator.js';
+import { join } from "path";
+import { config } from "../infrastructure/Config.js";
+import { logger } from "../utils/logger.js";
+import {
+  extractVideoId,
+  sanitizeFilename,
+  ensureDir,
+} from "../utils/helpers.js";
+import { videoDownloader } from "../services/VideoDownloader.js";
+import { transcriberFactory } from "../transcription/index.js";
+import { sceneDetector } from "../services/SceneDetector.js";
+import { visualAnalyzer } from "../services/VisualAnalyzer.js";
+import { summarizer } from "../services/Summarizer.js";
+import { markdownGenerator } from "../services/MarkdownGenerator.js";
 import type {
   VideoMetadata,
   VisualAnalysis,
   SummaryResult,
   ProgressCallback,
-} from '../types/index.js';
+} from "../types/index.js";
 import type {
   TranscriptionResult,
   TranscriptionSource,
-} from '../adapters/transcription/ITranscriber.js';
+} from "../transcription/ITranscriber.js";
 
 /**
  * Options for processing a video
@@ -65,7 +69,10 @@ export class VideoProcessor {
   /**
    * Process a YouTube video into a markdown summary
    */
-  async process(url: string, options: ProcessOptions = {}): Promise<ProcessResult> {
+  async process(
+    url: string,
+    options: ProcessOptions = {},
+  ): Promise<ProcessResult> {
     const startTime = Date.now();
     const stats = {
       downloadTime: 0,
@@ -89,14 +96,20 @@ export class VideoProcessor {
     const visualConfig = config.getVisual();
     const skipVisuals = options.skipVisuals ?? !visualConfig.enabled;
 
-    type ProcessingStage = 'download' | 'transcribe' | 'scene-detect' | 'visual-analyze' | 'summarize' | 'generate';
-    
+    type ProcessingStage =
+      | "download"
+      | "transcribe"
+      | "scene-detect"
+      | "visual-analyze"
+      | "summarize"
+      | "generate";
+
     // Progress helper
     const progress = (
       stage: ProcessingStage,
       step: number,
       total: number,
-      message: string
+      message: string,
     ) => {
       options.onProgress?.({
         stage,
@@ -107,19 +120,19 @@ export class VideoProcessor {
 
     try {
       // Step 1: Download video
-      progress('download', 1, 5, 'Downloading video...');
+      progress("download", 1, 5, "Downloading video...");
       const downloadStart = Date.now();
-      
+
       const download = await videoDownloader.download(url, {
         skipVideo: skipVisuals,
-        onProgress: (msg) => progress('download', 1, 5, msg),
+        onProgress: (msg) => progress("download", 1, 5, msg),
       });
-      
+
       stats.downloadTime = Date.now() - downloadStart;
       logger.debug(`Download completed in ${stats.downloadTime}ms`);
 
       // Step 2: Transcribe audio
-      progress('transcribe', 2, 5, 'Transcribing audio...');
+      progress("transcribe", 2, 5, "Transcribing audio...");
       const transcribeStart = Date.now();
 
       // Set video URL for captions fallback
@@ -129,46 +142,46 @@ export class VideoProcessor {
         download.audioPath,
         {
           preferredAdapter: options.transcriber,
-        }
+        },
       );
 
       stats.transcriptionTime = Date.now() - transcribeStart;
       logger.debug(
-        `Transcription completed in ${stats.transcriptionTime}ms using ${transcript.source}`
+        `Transcription completed in ${stats.transcriptionTime}ms using ${transcript.source}`,
       );
 
       // Step 3: Visual analysis (optional)
       let visuals: VisualAnalysis[] = [];
-      
+
       if (!skipVisuals && download.videoPath) {
-        progress('scene-detect', 3, 5, 'Detecting scenes...');
+        progress("scene-detect", 3, 5, "Detecting scenes...");
         const visualStart = Date.now();
 
         // Detect scenes and extract frames
         const frames = await sceneDetector.detectScenes(download.videoPath, {
           threshold: options.sceneThreshold ?? visualConfig.sceneThreshold,
           maxFrames: options.maxFrames ?? visualConfig.maxFrames,
-          onProgress: (msg) => progress('scene-detect', 3, 5, msg),
+          onProgress: (msg) => progress("scene-detect", 3, 5, msg),
         });
 
         if (frames.length > 0 && visualAnalyzer.isAvailable()) {
-          progress('visual-analyze', 3, 5, 'Analyzing visual content...');
-          
+          progress("visual-analyze", 3, 5, "Analyzing visual content...");
+
           visuals = await visualAnalyzer.analyzeFrames(frames, {
-            onProgress: (msg) => progress('visual-analyze', 3, 5, msg),
+            onProgress: (msg) => progress("visual-analyze", 3, 5, msg),
           });
         }
 
         stats.visualAnalysisTime = Date.now() - visualStart;
         logger.debug(
-          `Visual analysis completed in ${stats.visualAnalysisTime}ms (${visuals.length} frames)`
+          `Visual analysis completed in ${stats.visualAnalysisTime}ms (${visuals.length} frames)`,
         );
       } else {
-        progress('visual-analyze', 3, 5, 'Skipping visual analysis');
+        progress("visual-analyze", 3, 5, "Skipping visual analysis");
       }
 
       // Step 4: Summarize content
-      progress('summarize', 4, 5, 'Generating summary...');
+      progress("summarize", 4, 5, "Generating summary...");
       const summarizeStart = Date.now();
 
       const summary = await summarizer.summarize(
@@ -176,27 +189,27 @@ export class VideoProcessor {
         transcript,
         visuals,
         {
-          onProgress: (msg) => progress('summarize', 4, 5, msg),
-        }
+          onProgress: (msg) => progress("summarize", 4, 5, msg),
+        },
       );
 
       stats.summarizationTime = Date.now() - summarizeStart;
       logger.debug(`Summarization completed in ${stats.summarizationTime}ms`);
 
       // Step 5: Generate markdown
-      progress('generate', 5, 5, 'Generating markdown...');
+      progress("generate", 5, 5, "Generating markdown...");
 
       const includeTranscript = config.getOutput().includeFullTranscript;
       const markdown = markdownGenerator.generate(
         download.metadata,
         summary,
-        includeTranscript ? transcript : undefined
+        includeTranscript ? transcript : undefined,
       );
 
       // Determine output path
       const outputPath = this.resolveOutputPath(
         options.outputPath,
-        download.metadata
+        download.metadata,
       );
 
       // Save the markdown file
@@ -227,7 +240,7 @@ export class VideoProcessor {
    */
   private resolveOutputPath(
     customPath: string | undefined,
-    metadata: VideoMetadata
+    metadata: VideoMetadata,
   ): string {
     if (customPath) {
       return customPath;
@@ -253,17 +266,17 @@ export class VideoProcessor {
 
     // Check yt-dlp
     if (!(await videoDownloader.isAvailable())) {
-      missing.push('yt-dlp (required for video download)');
+      missing.push("yt-dlp (required for video download)");
     }
 
     // Check ffmpeg (needed for audio extraction and scene detection)
     if (!(await videoDownloader.hasFfmpeg())) {
-      missing.push('ffmpeg (required for audio/video processing)');
+      missing.push("ffmpeg (required for audio/video processing)");
     }
 
     // Check Anthropic API key
     if (!config.hasAnthropicKey()) {
-      missing.push('ANTHROPIC_API_KEY (required for summarization)');
+      missing.push("ANTHROPIC_API_KEY (required for summarization)");
     }
 
     // Check transcription options
@@ -272,21 +285,21 @@ export class VideoProcessor {
 
     if (availableTranscribers.length === 0) {
       warnings.push(
-        'No transcription adapters available. Install whisper.cpp, ' +
-        'faster-whisper, or set OPENAI_API_KEY for transcription.'
+        "No transcription adapters available. Install whisper.cpp, " +
+          "faster-whisper, or set OPENAI_API_KEY for transcription.",
       );
     } else {
-      const names = availableTranscribers.map((t) => t.name).join(', ');
+      const names = availableTranscribers.map((t) => t.name).join(", ");
       logger.debug(`Available transcribers: ${names}`);
     }
 
     // YouTube captions are always available as fallback
     const hasCaptionsFallback = transcribers.find(
-      (t) => t.source === 'youtube-captions'
+      (t) => t.source === "youtube-captions",
     )?.available;
 
     if (!hasCaptionsFallback && availableTranscribers.length === 0) {
-      missing.push('No transcription method available');
+      missing.push("No transcription method available");
     }
 
     return {
