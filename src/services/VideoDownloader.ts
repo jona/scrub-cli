@@ -1,14 +1,12 @@
-import { join } from "path";
 import { existsSync, readFileSync } from "fs";
-import { config } from "../infrastructure/Config.js";
 import { logger } from "../utils/logger.js";
 import {
   execAsync,
   commandExists,
   extractVideoId,
-  ensureDir,
   runCommand,
 } from "../utils/helpers.js";
+import { artifactStore } from "./ArtifactStore.js";
 import type { VideoMetadata, DownloadResult } from "../types/index.js";
 
 /**
@@ -29,10 +27,8 @@ interface YtDlpMetadata {
  * Service for downloading videos and extracting audio using yt-dlp
  */
 export class VideoDownloader {
-  private cacheDir: string;
-
   constructor() {
-    this.cacheDir = config.getCacheDir();
+    // No longer needs cacheDir - uses artifactStore
   }
 
   /**
@@ -73,17 +69,17 @@ export class VideoDownloader {
       throw new Error(`Invalid YouTube URL: ${url}`);
     }
 
-    // Create cache directory for this video
-    const videoCacheDir = join(this.cacheDir, videoId);
-    ensureDir(videoCacheDir);
+    // Ensure directories exist in .output/{videoId}/source/
+    artifactStore.ensureVideoDirectories(videoId);
+    const sourceDir = artifactStore.getSourceDir(videoId);
 
-    const audioPath = join(videoCacheDir, "audio.wav");
-    const videoPath = join(videoCacheDir, "video.mp4");
-    const metadataPath = join(videoCacheDir, "metadata.json");
+    const audioPath = artifactStore.getArtifactPath(videoId, "source/audio");
+    const videoPath = artifactStore.getArtifactPath(videoId, "source/video");
+    const metadataPath = artifactStore.getArtifactPath(videoId, "source/metadata");
 
     // Check if already downloaded
     if (existsSync(metadataPath) && existsSync(audioPath)) {
-      logger.debug("Using cached download");
+      logger.debug("Using cached download from artifacts");
       const metadata = JSON.parse(
         readFileSync(metadataPath, "utf-8")
       ) as VideoMetadata;
@@ -92,7 +88,7 @@ export class VideoDownloader {
         metadata,
         audioPath,
         videoPath: existsSync(videoPath) ? videoPath : "",
-        cacheDir: videoCacheDir,
+        cacheDir: sourceDir,
       };
     }
 
@@ -100,9 +96,8 @@ export class VideoDownloader {
     options?.onProgress?.("Fetching video metadata...");
     const metadata = await this.fetchMetadata(url);
 
-    // Save metadata
-    const { writeFileSync } = await import("fs");
-    writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+    // Save metadata using artifactStore
+    artifactStore.saveMetadata(videoId, metadata);
 
     // Download audio
     options?.onProgress?.("Downloading audio...");
@@ -124,7 +119,7 @@ export class VideoDownloader {
       metadata,
       audioPath,
       videoPath: finalVideoPath,
-      cacheDir: videoCacheDir,
+      cacheDir: sourceDir,
     };
   }
 
@@ -236,9 +231,8 @@ export class VideoDownloader {
    * Get cached download if available
    */
   getCached(videoId: string): DownloadResult | null {
-    const videoCacheDir = join(this.cacheDir, videoId);
-    const metadataPath = join(videoCacheDir, "metadata.json");
-    const audioPath = join(videoCacheDir, "audio.wav");
+    const audioPath = artifactStore.getArtifactPath(videoId, "source/audio");
+    const metadataPath = artifactStore.getArtifactPath(videoId, "source/metadata");
 
     if (!existsSync(metadataPath) || !existsSync(audioPath)) {
       return null;
@@ -248,13 +242,13 @@ export class VideoDownloader {
       readFileSync(metadataPath, "utf-8")
     ) as VideoMetadata;
 
-    const videoPath = join(videoCacheDir, "video.mp4");
+    const videoPath = artifactStore.getArtifactPath(videoId, "source/video");
 
     return {
       metadata,
       audioPath,
       videoPath: existsSync(videoPath) ? videoPath : "",
-      cacheDir: videoCacheDir,
+      cacheDir: artifactStore.getSourceDir(videoId),
     };
   }
 
@@ -262,10 +256,10 @@ export class VideoDownloader {
    * Clean up cached files for a video
    */
   async cleanCache(videoId: string): Promise<void> {
-    const videoCacheDir = join(this.cacheDir, videoId);
-    if (existsSync(videoCacheDir)) {
+    const videoDir = artifactStore.getVideoDir(videoId);
+    if (existsSync(videoDir)) {
       const { rm } = await import("fs/promises");
-      await rm(videoCacheDir, { recursive: true });
+      await rm(videoDir, { recursive: true });
     }
   }
 }

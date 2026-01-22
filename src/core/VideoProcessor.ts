@@ -1,12 +1,6 @@
-import { join } from "path";
-import { writeFileSync } from "fs";
 import { config } from "../infrastructure/Config.js";
 import { logger } from "../utils/logger.js";
-import {
-  extractVideoId,
-  sanitizeFilename,
-  ensureDir,
-} from "../utils/helpers.js";
+import { extractVideoId } from "../utils/helpers.js";
 import { videoDownloader } from "../services/VideoDownloader.js";
 import { transcriberFactory } from "../transcription/index.js";
 import { sceneDetector } from "../services/SceneDetector.js";
@@ -14,6 +8,7 @@ import { visualAnalyzer } from "../services/VisualAnalyzer.js";
 import { summarizer } from "../services/Summarizer.js";
 import { markdownGenerator } from "../services/MarkdownGenerator.js";
 import { skillGenerator } from "../services/SkillGenerator.js";
+import { artifactStore } from "../services/ArtifactStore.js";
 import type {
   VideoMetadata,
   VisualAnalysis,
@@ -164,6 +159,9 @@ export class VideoProcessor {
         `Transcription completed in ${stats.transcriptionTime}ms using ${transcript.source}`
       );
 
+      // Save transcription artifact
+      artifactStore.saveTranscription(videoId, transcript);
+
       // Step 3: Visual analysis (optional)
       let visuals: VisualAnalysis[] = [];
 
@@ -173,6 +171,7 @@ export class VideoProcessor {
 
         // Detect scenes and extract frames
         const frames = await sceneDetector.detectScenes(download.videoPath, {
+          videoId,
           threshold: options.sceneThreshold ?? visualConfig.sceneThreshold,
           maxFrames: options.maxFrames ?? visualConfig.maxFrames,
           onProgress: (msg) => progress("scene-detect", 3, 5, msg),
@@ -190,6 +189,11 @@ export class VideoProcessor {
         logger.debug(
           `Visual analysis completed in ${stats.visualAnalysisTime}ms (${visuals.length} frames)`
         );
+
+        // Save visual analysis artifact
+        if (visuals.length > 0) {
+          artifactStore.saveVisualAnalysis(videoId, visuals);
+        }
       } else {
         progress("visual-analyze", 3, 5, "Skipping visual analysis");
       }
@@ -210,6 +214,9 @@ export class VideoProcessor {
       stats.summarizationTime = Date.now() - summarizeStart;
       logger.debug(`Summarization completed in ${stats.summarizationTime}ms`);
 
+      // Save summary artifact
+      artifactStore.saveSummary(videoId, summary);
+
       // Step 5: Generate markdown
       progress("generate", 5, 5, "Generating markdown...");
 
@@ -220,14 +227,8 @@ export class VideoProcessor {
         includeTranscript ? transcript : undefined
       );
 
-      // Determine output path
-      const outputPath = this.resolveOutputPath(
-        options.outputPath,
-        download.metadata
-      );
-
-      // Save the markdown file
-      markdownGenerator.save(markdown, outputPath);
+      // Save markdown to artifact store (primary location)
+      const outputPath = artifactStore.saveMarkdown(videoId, markdown);
 
       // Step 6: Generate skill (optional)
       let skillPath: string | undefined;
@@ -248,14 +249,11 @@ export class VideoProcessor {
             }
           );
 
-          // Save skill to subdirectory: {outputDir}/{title}/SKILL.md
-          const skillDir = this.resolveSkillOutputDir(
-            download.metadata,
-            skillResult.suggestedName
-          );
-          ensureDir(skillDir);
-          skillPath = join(skillDir, "SKILL.md");
-          writeFileSync(skillPath, skillResult.skillMd, "utf-8");
+          // Save skill to artifact store
+          skillPath = artifactStore.saveSkill(videoId, skillResult.skillMd);
+
+          // Save skill checklist artifact
+          artifactStore.saveSkillChecklist(videoId, skillResult.checklist);
 
           stats.skillGenerationTime = Date.now() - skillStart;
           logger.debug(
@@ -273,6 +271,14 @@ export class VideoProcessor {
 
       logger.debug(`Total processing time: ${stats.totalTime}ms`);
 
+      // Finalize artifacts - create manifest and update index
+      artifactStore.finalizeArtifacts(
+        videoId,
+        download.metadata,
+        transcript.source,
+        stats
+      );
+
       return {
         metadata: download.metadata,
         transcript,
@@ -289,37 +295,6 @@ export class VideoProcessor {
       const err = error as Error;
       throw new Error(`Failed to process video ${videoId}: ${err.message}`);
     }
-  }
-
-  /**
-   * Resolve the output file path
-   */
-  private resolveOutputPath(
-    customPath: string | undefined,
-    metadata: VideoMetadata
-  ): string {
-    if (customPath) {
-      return customPath;
-    }
-
-    const outputDir = config.getOutputDir();
-    ensureDir(outputDir);
-
-    const filename = sanitizeFilename(metadata.title) || metadata.videoId;
-    return join(outputDir, `${filename}.md`);
-  }
-
-  /**
-   * Resolve the skill output directory
-   * Output: {outputDir}/{skillName}/SKILL.md
-   */
-  private resolveSkillOutputDir(
-    metadata: VideoMetadata,
-    skillName: string
-  ): string {
-    const outputDir = config.getOutputDir();
-    const dirName = sanitizeFilename(skillName) || metadata.videoId;
-    return join(outputDir, dirName);
   }
 
   /**

@@ -361,3 +361,96 @@ export interface SkillGenerationResult {
   /** Suggested skill name derived from video */
   suggestedName: string;
 }
+
+/**
+ * Artifact types for type-safe references
+ */
+export type ArtifactType =
+  | "source/audio"
+  | "source/video"
+  | "source/metadata"
+  | "frames"
+  | "transcription/json"
+  | "transcription/txt"
+  | "inference/summary"
+  | "inference/visual_analysis"
+  | "inference/skill_checklist"
+  | "output/markdown"
+  | "output/skill";
+
+/**
+ * Manifest tracking all artifacts for a processed video
+ */
+export interface ArtifactManifest {
+  /** YouTube video ID */
+  videoId: string;
+  /** Original YouTube URL */
+  url: string;
+  /** Video title */
+  title: string;
+  /** ISO timestamp when processing completed */
+  processedAt: string;
+  /** Pipeline version for compatibility tracking */
+  pipelineVersion: string;
+  /** Artifact inventory */
+  artifacts: {
+    source: {
+      audio: boolean;
+      video: boolean;
+      metadata: boolean;
+    };
+    frames: {
+      count: number;
+      paths: string[];
+    };
+    transcription: {
+      source: string | null;
+      hasJson: boolean;
+      hasTxt: boolean;
+    };
+    inference: {
+      summary: boolean;
+      visualAnalysis: boolean;
+      skillChecklist: boolean;
+    };
+    output: {
+      markdown: boolean;
+      skill: boolean;
+    };
+  };
+  /** Processing statistics */
+  stats: {
+    downloadTime: number;
+    transcriptionTime: number;
+    visualAnalysisTime: number;
+    summarizationTime: number;
+    skillGenerationTime?: number;
+    totalTime: number;
+  };
+}
+
+/**
+ * Entry in the global artifact index
+ */
+export interface ArtifactIndexEntry {
+  /** Video title */
+  title: string;
+  /** Original YouTube URL */
+  url: string;
+  /** ISO timestamp when processed */
+  processedAt: string;
+  /** Relative path to video directory */
+  outputPath: string;
+}
+
+/**
+ * Global index of all processed videos
+ */
+export interface ArtifactIndex {
+  /** Index schema version */
+  version: string;
+  /** ISO timestamp of last update */
+  lastUpdated: string;
+  /** Map of videoId to index entry */
+  videos: Record<string, ArtifactIndexEntry>;
+}

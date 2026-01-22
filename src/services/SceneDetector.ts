@@ -1,8 +1,9 @@
 import { existsSync, readdirSync } from "fs";
-import { join, basename } from "path";
+import { join } from "path";
 import { config } from "../infrastructure/Config.js";
 import { logger } from "../utils/logger.js";
-import { commandExists, runCommand, ensureDir } from "../utils/helpers.js";
+import { commandExists, runCommand } from "../utils/helpers.js";
+import { artifactStore } from "./ArtifactStore.js";
 import type { SceneFrame } from "../types/index.js";
 
 /**
@@ -23,6 +24,7 @@ export class SceneDetector {
   async detectScenes(
     videoPath: string,
     options?: {
+      videoId?: string;
       outputDir?: string;
       threshold?: number;
       maxFrames?: number;
@@ -46,10 +48,16 @@ export class SceneDetector {
     const minInterval = options?.minInterval ?? 2; // Default 2 seconds minimum between frames
 
     // Create output directory for frames
-    const outputDir =
-      options?.outputDir ??
-      join(config.getCacheDir(), basename(videoPath, ".mp4"), "frames");
-    ensureDir(outputDir);
+    let outputDir: string;
+    if (options?.outputDir) {
+      outputDir = options.outputDir;
+    } else if (options?.videoId) {
+      outputDir = artifactStore.getFramesDir(options.videoId);
+      artifactStore.ensureVideoDirectories(options.videoId);
+    } else {
+      // Fallback to output dir based on video path
+      throw new Error("videoId is required for scene detection");
+    }
 
     options?.onProgress?.("Analyzing video for scene changes...");
 
@@ -239,6 +247,7 @@ export class SceneDetector {
   async extractPeriodicFrames(
     videoPath: string,
     options?: {
+      videoId?: string;
       outputDir?: string;
       interval?: number; // Seconds between frames
       maxFrames?: number;
@@ -252,10 +261,15 @@ export class SceneDetector {
     const interval = options?.interval ?? 30; // Default every 30 seconds
     const maxFrames = options?.maxFrames ?? config.getVisual().maxFrames;
 
-    const outputDir =
-      options?.outputDir ??
-      join(config.getCacheDir(), basename(videoPath, ".mp4"), "frames");
-    ensureDir(outputDir);
+    let outputDir: string;
+    if (options?.outputDir) {
+      outputDir = options.outputDir;
+    } else if (options?.videoId) {
+      outputDir = artifactStore.getFramesDir(options.videoId);
+      artifactStore.ensureVideoDirectories(options.videoId);
+    } else {
+      throw new Error("videoId is required for frame extraction");
+    }
 
     const duration = await this.getVideoDuration(videoPath);
     const timestamps: number[] = [];
@@ -276,10 +290,10 @@ export class SceneDetector {
   }
 
   /**
-   * Get cached frames if available
+   * Get cached frames if available (by videoId)
    */
-  getCachedFrames(cacheDir: string): SceneFrame[] | null {
-    const framesDir = join(cacheDir, "frames");
+  getCachedFrames(videoId: string): SceneFrame[] | null {
+    const framesDir = artifactStore.getFramesDir(videoId);
 
     if (!existsSync(framesDir)) {
       return null;

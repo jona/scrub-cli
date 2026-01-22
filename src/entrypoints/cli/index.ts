@@ -218,7 +218,10 @@ program
       configPath ? fmt.path(configPath) : fmt.dim("using defaults")
     );
     logger.keyValue("  Output dir", fmt.path(config.getOutputDir()));
-    logger.keyValue("  Cache dir", fmt.path(config.getCacheDir()));
+    logger.keyValue(
+      "  Artifacts",
+      fmt.dim("stored in .output/{videoId}/")
+    );
 
     // Summary
     logger.newline();
