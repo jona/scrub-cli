@@ -15,6 +15,7 @@ import type {
   SummaryResult,
   ProgressCallback,
   SkillGenerationResult,
+  SourcePlaylist,
 } from "../types/index.js";
 import type {
   TranscriptionResult,
@@ -43,6 +44,8 @@ export interface ProcessOptions {
   onProgress?: ProgressCallback;
   /** Verbose logging */
   verbose?: boolean;
+  /** Source playlist info (if video came from a playlist) */
+  sourcePlaylist?: SourcePlaylist;
 }
 
 /**
@@ -276,7 +279,8 @@ export class VideoProcessor {
         videoId,
         download.metadata,
         transcript.source,
-        stats
+        stats,
+        options.sourcePlaylist
       );
 
       return {

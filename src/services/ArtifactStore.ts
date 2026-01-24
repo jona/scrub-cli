@@ -17,6 +17,7 @@ import type {
   SummaryResult,
   VisualAnalysis,
   SkillChecklist,
+  SourcePlaylist,
 } from "../types/index.js";
 import type { TranscriptionResult } from "../transcription/ITranscriber.js";
 
@@ -347,11 +348,12 @@ export class ArtifactStore {
     videoId: string,
     metadata: VideoMetadata,
     transcriptionSource: string | null,
-    stats: ArtifactManifest["stats"]
+    stats: ArtifactManifest["stats"],
+    sourcePlaylist?: SourcePlaylist
   ): ArtifactManifest {
     const framePaths = this.getFramePaths(videoId);
 
-    return {
+    const manifest: ArtifactManifest = {
       videoId,
       url: metadata.url,
       title: metadata.title,
@@ -386,6 +388,12 @@ export class ArtifactStore {
       },
       stats,
     };
+
+    if (sourcePlaylist) {
+      manifest.sourcePlaylist = sourcePlaylist;
+    }
+
+    return manifest;
   }
 
   /**
@@ -439,14 +447,16 @@ export class ArtifactStore {
     videoId: string,
     metadata: VideoMetadata,
     transcriptionSource: string | null,
-    stats: ArtifactManifest["stats"]
+    stats: ArtifactManifest["stats"],
+    sourcePlaylist?: SourcePlaylist
   ): void {
     // Create and save manifest
     const manifest = this.createManifest(
       videoId,
       metadata,
       transcriptionSource,
-      stats
+      stats,
+      sourcePlaylist
     );
     this.saveManifest(videoId, manifest);
 

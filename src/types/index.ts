@@ -392,6 +392,8 @@ export interface ArtifactManifest {
   processedAt: string;
   /** Pipeline version for compatibility tracking */
   pipelineVersion: string;
+  /** Optional: playlist this video was extracted from */
+  sourcePlaylist?: SourcePlaylist;
   /** Artifact inventory */
   artifacts: {
     source: {
@@ -453,4 +455,73 @@ export interface ArtifactIndex {
   lastUpdated: string;
   /** Map of videoId to index entry */
   videos: Record<string, ArtifactIndexEntry>;
+}
+
+/**
+ * Playlist metadata extracted from YouTube
+ */
+export interface PlaylistMetadata {
+  playlistId: string;
+  title: string;
+  description: string;
+  channelName: string;
+  videoCount: number;
+  url: string;
+}
+
+/**
+ * Individual entry in a playlist
+ */
+export interface PlaylistEntry {
+  videoId: string;
+  title: string;
+  duration: number;
+  position: number;
+  url: string;
+}
+
+/**
+ * Status type for playlist video processing
+ */
+export type PlaylistVideoStatusType =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "skipped";
+
+/**
+ * Status of individual video processing within a playlist
+ */
+export interface PlaylistVideoStatus {
+  videoId: string;
+  title: string;
+  status: PlaylistVideoStatusType;
+  stage?: string;
+  error?: string;
+  outputPath?: string;
+}
+
+/**
+ * Result from processing an entire playlist
+ */
+export interface PlaylistProcessResult {
+  playlist: PlaylistMetadata;
+  videos: PlaylistVideoStatus[];
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  stats: {
+    totalTime: number;
+    averageTimePerVideo: number;
+  };
+}
+
+/**
+ * Source playlist info stored in artifact manifest
+ */
+export interface SourcePlaylist {
+  playlistId: string;
+  title: string;
+  position: number;
 }

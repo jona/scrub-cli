@@ -16,8 +16,13 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { videoProcessor } from "../../core/VideoProcessor.js";
+import { playlistProcessor } from "../../core/PlaylistProcessor.js";
 import { transcriberFactory } from "../../transcription/index.js";
-import { TOOL_DEFINITIONS, ScrubVideoInputSchema } from "./tools.js";
+import {
+  TOOL_DEFINITIONS,
+  ScrubVideoInputSchema,
+  ScrubPlaylistInputSchema,
+} from "./tools.js";
 import {
   formatOutput,
   formatDiagnostics,
@@ -105,6 +110,9 @@ function createServer(): Server {
         switch (name) {
           case "scrub_video":
             return await handleScrubVideo(args ?? {});
+
+          case "scrub_playlist":
+            return await handleScrubPlaylist(args ?? {});
 
           case "scrub_doctor":
             return await handleScrubDoctor();
@@ -223,6 +231,100 @@ async function handleScrubVideo(input: unknown) {
       {
         type: "text" as const,
         text: JSON.stringify(formatted, null, 2),
+      },
+    ],
+  };
+}
+
+/**
+ * Handle scrub_playlist tool call
+ */
+async function handleScrubPlaylist(input: unknown) {
+  // Validate input
+  const parsed = ScrubPlaylistInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({
+            error: "Invalid input",
+            details: parsed.error.format(),
+          }),
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  const {
+    url,
+    maxVideos,
+    skipVisuals,
+    transcriber,
+    concurrency,
+    continueOnError,
+    skipExisting,
+  } = parsed.data;
+
+  log(`Processing playlist: ${url}`);
+
+  // Check prerequisites first
+  const prereqs = await videoProcessor.checkPrerequisites();
+  if (!prereqs.ready) {
+    log(`Prerequisites not met: ${prereqs.missing.join(", ")}`);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({
+            error: "Prerequisites not met",
+            missing: prereqs.missing,
+            warnings: prereqs.warnings,
+            suggestion: "Run scrub_doctor to see full diagnostics",
+          }),
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  // Process the playlist
+  const result = await playlistProcessor.processPlaylist(url, {
+    maxVideos,
+    skipVisuals,
+    transcriber: transcriber as TranscriptionSource | undefined,
+    concurrency,
+    continueOnError,
+    skipExisting,
+    onStart: (_videos, total) => {
+      log(`Found ${total} videos in playlist`);
+    },
+    onProgress: (videoId, status, stage) => {
+      log(`[${videoId}] ${status}${stage ? `: ${stage}` : ""}`);
+    },
+  });
+
+  log(
+    `Completed playlist: ${result.succeeded}/${result.playlist.videoCount} succeeded`
+  );
+
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify(
+          {
+            playlist: result.playlist,
+            succeeded: result.succeeded,
+            failed: result.failed,
+            skipped: result.skipped,
+            videos: result.videos,
+            stats: result.stats,
+          },
+          null,
+          2
+        ),
       },
     ],
   };

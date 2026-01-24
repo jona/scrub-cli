@@ -63,6 +63,52 @@ export const ScrubVideoInputSchema = z.object({
 export type ScrubVideoInput = z.infer<typeof ScrubVideoInputSchema>;
 
 /**
+ * Schema for scrub_playlist tool input
+ */
+export const ScrubPlaylistInputSchema = z.object({
+  url: z.string().describe("YouTube playlist URL to process"),
+  maxVideos: z
+    .number()
+    .optional()
+    .default(0)
+    .describe("Maximum videos to process (0 = unlimited)"),
+  skipVisuals: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Skip visual analysis for faster processing"),
+  transcriber: z
+    .enum([
+      "local-whisper",
+      "faster-whisper",
+      "openai",
+      "deepgram",
+      "youtube-captions",
+    ])
+    .optional()
+    .describe("Force a specific transcription adapter"),
+  concurrency: z
+    .number()
+    .min(1)
+    .max(5)
+    .optional()
+    .default(1)
+    .describe("Number of videos to process in parallel (1-5)"),
+  continueOnError: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe("Continue processing if individual videos fail"),
+  skipExisting: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe("Skip videos that have already been processed"),
+});
+
+export type ScrubPlaylistInput = z.infer<typeof ScrubPlaylistInputSchema>;
+
+/**
  * Schema for scrub_doctor tool input (no inputs needed)
  */
 export const ScrubDoctorInputSchema = z.object({});
@@ -216,6 +262,82 @@ Transcribers are tried in priority order during processing.`,
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: false,
+    },
+  },
+  {
+    name: "scrub_playlist",
+    description: `Process a YouTube playlist and extract content from all videos.
+
+WHEN TO USE: Use when you need to process multiple related videos from a playlist.
+
+Returns:
+- Playlist metadata (title, video count)
+- Status of each video (succeeded, failed, skipped)
+- Aggregate stats (total time, success rate)
+
+Options:
+- maxVideos: Limit how many videos to process (0 = all)
+- skipExisting: Skip videos that have already been processed (default: true)
+- concurrency: Process multiple videos in parallel (1-5, default: 1)
+- continueOnError: Keep processing if individual videos fail (default: true)
+
+NOTE: Processing can take significant time for large playlists. Use maxVideos to limit scope.
+Consider using skipVisuals=true and continueOnError=true for large playlists.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        url: {
+          type: "string",
+          description: "YouTube playlist URL to process",
+        },
+        maxVideos: {
+          type: "number",
+          default: 0,
+          description: "Maximum videos to process (0 = all)",
+        },
+        skipVisuals: {
+          type: "boolean",
+          default: false,
+          description: "Skip visual analysis for faster processing",
+        },
+        transcriber: {
+          type: "string",
+          enum: [
+            "local-whisper",
+            "faster-whisper",
+            "openai",
+            "deepgram",
+            "youtube-captions",
+          ],
+          description: "Force a specific transcription adapter",
+        },
+        concurrency: {
+          type: "number",
+          minimum: 1,
+          maximum: 5,
+          default: 1,
+          description: "Number of videos to process in parallel (1-5)",
+        },
+        continueOnError: {
+          type: "boolean",
+          default: true,
+          description: "Continue processing if individual videos fail",
+        },
+        skipExisting: {
+          type: "boolean",
+          default: true,
+          description: "Skip videos that have already been processed",
+        },
+      },
+      required: ["url"],
+      additionalProperties: false,
+    },
+    annotations: {
+      title: "Process YouTube Playlist",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
     },
   },
 ] as const;

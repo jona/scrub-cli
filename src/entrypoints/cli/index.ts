@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 
+import React from "react";
+import { render } from "ink";
 import { Command } from "commander";
 import { logger, fmt } from "../../utils/logger.js";
 import { config } from "../../infrastructure/Config.js";
 import { videoProcessor } from "../../core/VideoProcessor.js";
 import { transcriberFactory } from "../../transcription/index.js";
+import { App } from "./components/App.js";
 import type { TranscriptionSource } from "../../transcription/ITranscriber.js";
 
 const program = new Command();
@@ -18,7 +21,7 @@ program
  * Main process command
  */
 program
-  .argument("<url>", "YouTube video URL to process")
+  .argument("<url>", "YouTube video or playlist URL to process")
   .option("-o, --output <path>", "Output file path")
   .option(
     "-t, --transcriber <name>",
@@ -38,9 +41,19 @@ program
   )
   .option("-v, --verbose", "Show detailed progress")
   .option("--dry-run", "Check prerequisites without processing")
+  // Playlist-specific options
+  .option(
+    "--max-videos <number>",
+    "Maximum videos to process from playlist",
+    parseInt
+  )
+  .option(
+    "--parallel <number>",
+    "Process N videos in parallel (default: 1)",
+    parseInt
+  )
+  .option("--no-skip-existing", "Reprocess videos that already exist")
   .action(async (url: string, options) => {
-    logger.banner();
-
     // Set verbose mode
     if (options.verbose) {
       logger.setVerbose(true);
@@ -51,9 +64,10 @@ program
       const prereqs = await videoProcessor.checkPrerequisites();
 
       if (!prereqs.ready) {
+        logger.banner();
         logger.error("Missing prerequisites:");
         for (const missing of prereqs.missing) {
-          logger.keyValue("  ✗", missing);
+          logger.keyValue("  \u2717", missing);
         }
         logger.newline();
         logger.info("Please install the missing dependencies and try again.");
@@ -67,90 +81,61 @@ program
 
       // Dry run mode
       if (options.dryRun) {
+        logger.banner();
         logger.success("All prerequisites satisfied. Ready to process.");
         const diag = await videoProcessor.getDiagnostics();
         logger.newline();
         logger.header("System Diagnostics");
-        logger.keyValue("yt-dlp", diag.ytdlp ? "✓ installed" : "✗ missing");
-        logger.keyValue("ffmpeg", diag.ffmpeg ? "✓ installed" : "✗ missing");
+        logger.keyValue("yt-dlp", diag.ytdlp ? "\u2713 installed" : "\u2717 missing");
+        logger.keyValue("ffmpeg", diag.ffmpeg ? "\u2713 installed" : "\u2717 missing");
         logger.keyValue(
           "Anthropic API",
-          diag.anthropicKey ? "✓ configured" : "✗ missing"
+          diag.anthropicKey ? "\u2713 configured" : "\u2717 missing"
         );
         logger.newline();
         logger.info("Available transcribers:");
         for (const t of diag.transcribers) {
-          const status = t.available ? fmt.green("✓") : fmt.red("✗");
+          const status = t.available ? fmt.green("\u2713") : fmt.red("\u2717");
           logger.keyValue(`  ${status}`, t.name);
         }
         return;
       }
 
-      // Process the video
-      logger.info(`Processing: ${fmt.url(url)}`);
-      logger.newline();
-
-      const startTime = Date.now();
-
-      logger.startSpinner("Starting...");
-
-      const result = await videoProcessor.process(url, {
-        outputPath: options.output,
-        skipVisuals: options.visuals === false,
-        transcriber: options.transcriber as TranscriptionSource | undefined,
-        sceneThreshold: options.sceneThreshold,
-        maxFrames: options.maxFrames,
-        generateSkill: options.outputSkill,
-        skillName: options.skillName,
-        verbose: options.verbose,
-        onProgress: (progress) => {
-          logger.updateSpinner(progress.message);
-        },
-      });
-
-      logger.stopSpinnerSuccess("Processing complete!");
-
-      // Show results
-      logger.newline();
-      logger.header("Results");
-      logger.keyValue("Title", result.metadata.title);
-      logger.keyValue("Duration", fmt.time(result.metadata.duration));
-      logger.keyValue("Transcription", result.transcript.source);
-      logger.keyValue("Frames analyzed", String(result.visuals.length));
-      logger.keyValue("Sections", String(result.summary.sections.length));
-      logger.keyValue("Output", fmt.path(result.outputPath));
-
-      logger.newline();
-      logger.header("Timing");
-      logger.keyValue("Download", fmt.duration(result.stats.downloadTime));
-      logger.keyValue(
-        "Transcription",
-        fmt.duration(result.stats.transcriptionTime)
+      // Process using Ink UI
+      const { waitUntilExit } = render(
+        React.createElement(App, {
+          url,
+          options: {
+            outputPath: options.output,
+            skipVisuals: options.visuals === false,
+            transcriber: options.transcriber as TranscriptionSource | undefined,
+            sceneThreshold: options.sceneThreshold,
+            maxFrames: options.maxFrames,
+            generateSkill: options.outputSkill,
+            skillName: options.skillName,
+            verbose: options.verbose,
+            maxVideos: options.maxVideos || 0,
+            concurrency: options.parallel || 1,
+            skipExisting: options.skipExisting !== false,
+            continueOnError: true,
+          },
+          onComplete: (result) => {
+            // Results are displayed by the App component
+            process.exitCode = result.failed > 0 ? 1 : 0;
+          },
+          onError: (error) => {
+            console.error(error.message);
+            process.exitCode = 1;
+          },
+        })
       );
-      logger.keyValue(
-        "Visual analysis",
-        fmt.duration(result.stats.visualAnalysisTime)
-      );
-      logger.keyValue(
-        "Summarization",
-        fmt.duration(result.stats.summarizationTime)
-      );
-      logger.keyValue("Total", fmt.duration(Date.now() - startTime));
 
-      logger.newline();
-      logger.success(`Summary saved to: ${fmt.path(result.outputPath)}`);
-
-      if (result.skillPath) {
-        logger.success(`Skill saved to: ${fmt.path(result.skillPath)}`);
-      }
+      await waitUntilExit();
     } catch (error) {
-      logger.stopSpinnerFail("Processing failed");
       logger.error((error as Error).message);
-
       if (options.verbose) {
         console.error(error);
       }
-
       process.exit(1);
     }
   });
@@ -172,11 +157,11 @@ program
     logger.info("External Tools:");
     logger.keyValue(
       "  yt-dlp",
-      diag.ytdlp ? fmt.green("✓ installed") : fmt.red("✗ not found")
+      diag.ytdlp ? fmt.green("\u2713 installed") : fmt.red("\u2717 not found")
     );
     logger.keyValue(
       "  ffmpeg",
-      diag.ffmpeg ? fmt.green("✓ installed") : fmt.red("✗ not found")
+      diag.ffmpeg ? fmt.green("\u2713 installed") : fmt.red("\u2717 not found")
     );
 
     // API Keys
@@ -184,19 +169,19 @@ program
     logger.info("API Keys:");
     logger.keyValue(
       "  ANTHROPIC_API_KEY",
-      diag.anthropicKey ? fmt.green("✓ configured") : fmt.red("✗ missing")
+      diag.anthropicKey ? fmt.green("\u2713 configured") : fmt.red("\u2717 missing")
     );
     logger.keyValue(
       "  OPENAI_API_KEY",
       config.getApiKey("openai")
-        ? fmt.green("✓ configured")
-        : fmt.dim("○ not set (optional)")
+        ? fmt.green("\u2713 configured")
+        : fmt.dim("\u25CB not set (optional)")
     );
     logger.keyValue(
       "  DEEPGRAM_API_KEY",
       config.getApiKey("deepgram")
-        ? fmt.green("✓ configured")
-        : fmt.dim("○ not set (optional)")
+        ? fmt.green("\u2713 configured")
+        : fmt.dim("\u25CB not set (optional)")
     );
 
     // Transcribers
@@ -204,8 +189,8 @@ program
     logger.info("Transcription Adapters:");
     for (const t of diag.transcribers) {
       const status = t.available
-        ? fmt.green("✓ available")
-        : fmt.dim("○ not available");
+        ? fmt.green("\u2713 available")
+        : fmt.dim("\u25CB not available");
       logger.keyValue(`  ${t.name}`, status);
     }
 
@@ -271,8 +256,8 @@ program
 
     for (const t of diag) {
       const status = t.available
-        ? fmt.green("✓ Available")
-        : fmt.red("✗ Not available");
+        ? fmt.green("\u2713 Available")
+        : fmt.red("\u2717 Not available");
       const apiNote = t.requiresApiKey ? fmt.dim(" (requires API key)") : "";
 
       logger.newline();
