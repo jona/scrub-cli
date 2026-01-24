@@ -204,41 +204,41 @@ export class SkillGenerator {
       options?.transcript
     );
 
-    const prompt = `You are an expert at creating AI agent skills. You've been given the skill-creator guide and video content.
+    const prompt = `
+      <skill_creator_guide>
+      ${guide}
+      </skill_creator_guide>
 
-<skill_creator_guide>
-${guide}
-</skill_creator_guide>
+      <video_content>
+      ${videoContent}
+      </video_content>
 
-<video_content>
-${videoContent}
-</video_content>
+      Analyze this video content against skill creation requirements.
 
-Analyze this video content against skill creation requirements.
+      For each skill component, assess:
+      1. Whether the video provides enough information to cover it
+      2. What source the information comes from (summary, transcript, or needs inference)
+      3. What gaps exist that would need to be filled by inference
 
-For each skill component, assess:
-1. Whether the video provides enough information to cover it
-2. What source the information comes from (summary, transcript, or needs inference)
-3. What gaps exist that would need to be filled by inference
+      Return a JSON object with this structure:
+      {
+        "suggestedName": "kebab-case-skill-name",
+        "suitabilityScore": 0-10,
+        "checklist": {
+          "name": { "covered": true/false, "source": "summary"|"transcript"|"inferred"|null, "gaps": [] },
+          "description": { "covered": true/false, "source": "...", "gaps": [] },
+          "triggerScenarios": { "covered": true/false, "source": "...", "gaps": ["gap1", "gap2"] },
+          "domainKnowledge": { "covered": true/false, "source": "...", "gaps": [] },
+          "workflows": { "covered": true/false, "source": "...", "gaps": [] },
+          "examples": { "covered": true/false, "source": "...", "gaps": [] },
+          "codeSnippets": { "covered": true/false, "source": "...", "gaps": [] },
+          "templates": { "covered": true/false, "source": "...", "gaps": [] }
+        },
+        "notes": "Any important observations about skill generation feasibility"
+      }
 
-Return a JSON object with this structure:
-{
-  "suggestedName": "kebab-case-skill-name",
-  "suitabilityScore": 0-10,
-  "checklist": {
-    "name": { "covered": true/false, "source": "summary"|"transcript"|"inferred"|null, "gaps": [] },
-    "description": { "covered": true/false, "source": "...", "gaps": [] },
-    "triggerScenarios": { "covered": true/false, "source": "...", "gaps": ["gap1", "gap2"] },
-    "domainKnowledge": { "covered": true/false, "source": "...", "gaps": [] },
-    "workflows": { "covered": true/false, "source": "...", "gaps": [] },
-    "examples": { "covered": true/false, "source": "...", "gaps": [] },
-    "codeSnippets": { "covered": true/false, "source": "...", "gaps": [] },
-    "templates": { "covered": true/false, "source": "...", "gaps": [] }
-  },
-  "notes": "Any important observations about skill generation feasibility"
-}
-
-Respond with ONLY the JSON object:`;
+      Respond with ONLY the JSON object:
+    `;
 
     let response: Anthropic.Message;
     let attempts = 0;
@@ -250,6 +250,8 @@ Respond with ONLY the JSON object:`;
         response = await client.messages.create({
           model: summarizerConfig.model,
           max_tokens: 2048,
+          system:
+            "You are an expert at creating AI agent skills. You've been given the skill-creator guide and video content. Analyze this video content against skill creation requirements.",
           messages: [{ role: "user", content: prompt }],
         });
 
