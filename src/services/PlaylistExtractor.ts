@@ -103,7 +103,7 @@ export class PlaylistExtractor {
     logger.debug(`Extracting playlist from: ${url}`);
 
     const { stdout } = await execAsync(
-      `yt-dlp --flat-playlist --dump-json -J "${url}"`,
+      `yt-dlp --flat-playlist -J "${url}"`,
       { maxBuffer: 50 * 1024 * 1024 } // 50MB buffer for large playlists
     );
 
