@@ -143,27 +143,34 @@ export class VideoProcessor {
       stats.downloadTime = Date.now() - downloadStart;
       logger.debug(`Download completed in ${stats.downloadTime}ms`);
 
-      // Step 2: Transcribe audio
+      // Step 2: Transcribe audio (or use cached transcript)
       progress("transcribe", 2, 5, "Transcribing audio...");
       const transcribeStart = Date.now();
 
-      // Set video URL for captions fallback
-      transcriberFactory.setVideoUrl(url);
+      // Check for existing transcript first
+      let transcript = artifactStore.loadTranscription(videoId);
 
-      const transcript = await transcriberFactory.transcribe(
-        download.audioPath,
-        {
+      if (transcript && !options.transcriber) {
+        // Use cached transcript (unless user forced a specific transcriber)
+        stats.transcriptionTime = Date.now() - transcribeStart;
+        logger.info(`Using cached transcript for ${videoId}`);
+        progress("transcribe", 2, 5, "Using cached transcript");
+      } else {
+        // Set video URL for captions fallback
+        transcriberFactory.setVideoUrl(url);
+
+        transcript = await transcriberFactory.transcribe(download.audioPath, {
           preferredAdapter: options.transcriber,
-        }
-      );
+        });
 
-      stats.transcriptionTime = Date.now() - transcribeStart;
-      logger.debug(
-        `Transcription completed in ${stats.transcriptionTime}ms using ${transcript.source}`
-      );
+        stats.transcriptionTime = Date.now() - transcribeStart;
+        logger.debug(
+          `Transcription completed in ${stats.transcriptionTime}ms using ${transcript.source}`
+        );
 
-      // Save transcription artifact
-      artifactStore.saveTranscription(videoId, transcript);
+        // Save transcription artifact
+        artifactStore.saveTranscription(videoId, transcript);
+      }
 
       // Step 3: Visual analysis (optional)
       let visuals: VisualAnalysis[] = [];
