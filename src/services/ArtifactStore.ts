@@ -367,9 +367,7 @@ export class ArtifactStore {
         },
         frames: {
           count: framePaths.length,
-          paths: framePaths.map((p) =>
-            relative(this.getVideoDir(videoId), p)
-          ),
+          paths: framePaths.map((p) => relative(this.getVideoDir(videoId), p)),
         },
         transcription: {
           source: transcriptionSource,
@@ -378,8 +376,14 @@ export class ArtifactStore {
         },
         inference: {
           summary: this.hasArtifact(videoId, "inference/summary"),
-          visualAnalysis: this.hasArtifact(videoId, "inference/visual_analysis"),
-          skillChecklist: this.hasArtifact(videoId, "inference/skill_checklist"),
+          visualAnalysis: this.hasArtifact(
+            videoId,
+            "inference/visual_analysis"
+          ),
+          skillChecklist: this.hasArtifact(
+            videoId,
+            "inference/skill_checklist"
+          ),
         },
         output: {
           markdown: this.hasArtifact(videoId, "output/markdown"),

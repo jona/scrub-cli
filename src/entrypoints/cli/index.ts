@@ -86,8 +86,14 @@ program
         const diag = await videoProcessor.getDiagnostics();
         logger.newline();
         logger.header("System Diagnostics");
-        logger.keyValue("yt-dlp", diag.ytdlp ? "\u2713 installed" : "\u2717 missing");
-        logger.keyValue("ffmpeg", diag.ffmpeg ? "\u2713 installed" : "\u2717 missing");
+        logger.keyValue(
+          "yt-dlp",
+          diag.ytdlp ? "\u2713 installed" : "\u2717 missing"
+        );
+        logger.keyValue(
+          "ffmpeg",
+          diag.ffmpeg ? "\u2713 installed" : "\u2717 missing"
+        );
         logger.keyValue(
           "Anthropic API",
           diag.anthropicKey ? "\u2713 configured" : "\u2717 missing"
@@ -169,7 +175,9 @@ program
     logger.info("API Keys:");
     logger.keyValue(
       "  ANTHROPIC_API_KEY",
-      diag.anthropicKey ? fmt.green("\u2713 configured") : fmt.red("\u2717 missing")
+      diag.anthropicKey
+        ? fmt.green("\u2713 configured")
+        : fmt.red("\u2717 missing")
     );
     logger.keyValue(
       "  OPENAI_API_KEY",
@@ -203,10 +211,7 @@ program
       configPath ? fmt.path(configPath) : fmt.dim("using defaults")
     );
     logger.keyValue("  Output dir", fmt.path(config.getOutputDir()));
-    logger.keyValue(
-      "  Artifacts",
-      fmt.dim("stored in .output/{videoId}/")
-    );
+    logger.keyValue("  Artifacts", fmt.dim("stored in .output/{videoId}/"));
 
     // Summary
     logger.newline();

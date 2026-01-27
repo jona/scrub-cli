@@ -75,7 +75,10 @@ export class VideoDownloader {
 
     const audioPath = artifactStore.getArtifactPath(videoId, "source/audio");
     const videoPath = artifactStore.getArtifactPath(videoId, "source/video");
-    const metadataPath = artifactStore.getArtifactPath(videoId, "source/metadata");
+    const metadataPath = artifactStore.getArtifactPath(
+      videoId,
+      "source/metadata"
+    );
 
     // Check if already downloaded
     if (existsSync(metadataPath) && existsSync(audioPath)) {
@@ -232,7 +235,10 @@ export class VideoDownloader {
    */
   getCached(videoId: string): DownloadResult | null {
     const audioPath = artifactStore.getArtifactPath(videoId, "source/audio");
-    const metadataPath = artifactStore.getArtifactPath(videoId, "source/metadata");
+    const metadataPath = artifactStore.getArtifactPath(
+      videoId,
+      "source/metadata"
+    );
 
     if (!existsSync(metadataPath) || !existsSync(audioPath)) {
       return null;

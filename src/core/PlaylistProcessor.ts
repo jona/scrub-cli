@@ -13,8 +13,10 @@ import type {
 /**
  * Options for playlist processing
  */
-export interface PlaylistProcessOptions
-  extends Omit<ProcessOptions, "onProgress" | "sourcePlaylist"> {
+export interface PlaylistProcessOptions extends Omit<
+  ProcessOptions,
+  "onProgress" | "sourcePlaylist"
+> {
   /** Maximum videos to process (0 = unlimited) */
   maxVideos?: number;
   /** Number of videos to process in parallel (default: 1 for sequential) */
@@ -213,10 +215,7 @@ export class PlaylistProcessor {
         batch.map(async (entry, batchIndex) => {
           const status = batchStatuses[batchIndex];
 
-          if (
-            options.skipExisting &&
-            artifactStore.hasVideo(entry.videoId)
-          ) {
+          if (options.skipExisting && artifactStore.hasVideo(entry.videoId)) {
             status.status = "skipped";
             status.outputPath = artifactStore.getArtifactPath(
               entry.videoId,

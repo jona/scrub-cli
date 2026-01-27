@@ -59,7 +59,11 @@ function VideoStatusLine({ video, index, total }: VideoStatusLineProps) {
   );
 }
 
-function StatusIndicator({ status }: { status: PlaylistVideoStatus["status"] }) {
+function StatusIndicator({
+  status,
+}: {
+  status: PlaylistVideoStatus["status"];
+}) {
   switch (status) {
     case "completed":
       return <Text color="green"> {"\u2713"} </Text>;
