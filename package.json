@@ -1,7 +1,7 @@
 {
   "name": "scrub",
-  "version": "1.0.0",
-  "description": "Convert YouTube videos into comprehensive markdown summaries",
+  "version": "0.1.0",
+  "description": "Turn videos to Agent Skills in seconds.",
   "main": "dist/entrypoints/cli/index.js",
   "bin": {
     "scrub": "./dist/entrypoints/cli/index.js",
@@ -15,7 +15,10 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test": "vitest",
+    "test:e2e": "vitest run --include-e2e",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "youtube",
@@ -49,9 +52,13 @@
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.18",
+    "@vitest/coverage-v8": "^4.0.18",
+    "execa": "^9.6.1",
+    "nock": "^14.0.10",
     "prettier": "^3.8.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=18.0.0"
