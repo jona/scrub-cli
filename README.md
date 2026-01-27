@@ -232,7 +232,7 @@ scrub doctor
 scrub transcribers
 ```
 
-## MCP Integration
+## MCP Integration (WIP - Not fully tested)
 
 Scrub can be used as an MCP (Model Context Protocol) server, allowing AI agents to extract content from YouTube videos for context, skills, and knowledge building.
 
