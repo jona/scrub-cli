@@ -1,12 +1,12 @@
 # Scrub
 
-Convert YouTube videos into comprehensive markdown summaries. Perfect for quickly reviewing educational content, creating reference documentation, and building a personal knowledge base.
+Turn YouTube videos into comprehensive summaries and Agent Skills in seconds. Perfect for quickly reviewing educational content, creating reference documentation, building a personal knowledge base, and generating reusable skills for AI agents.
 
 ## Features
 
 - **Smart Transcription**: Multiple transcription adapters with automatic fallback
-  - Local Whisper (whisper.cpp) - default, privacy-first
-  - Faster-Whisper (Python) - optimized performance
+  - Faster-Whisper (Python) - default, optimized performance
+  - Local Whisper (whisper.cpp) - privacy-first
   - OpenAI Whisper API - cloud-based
   - Deepgram API - enterprise-grade
   - YouTube Captions - fallback when no transcription available
@@ -21,6 +21,21 @@ Convert YouTube videos into comprehensive markdown summaries. Perfect for quickl
   - Key takeaways and bullet points
   - Code snippet extraction and consolidation
   - References and resource links
+  - Comprehensive analysis (thesis, claims, mental models, bias analysis)
+
+- **Skill Generation**: Create Agent Skills from video content
+  - Generate SKILL.md files for AI agent consumption
+  - Includes examples, workflows, and templates
+  - Skill checklist to assess coverage
+
+- **Playlist Support**: Process entire YouTube playlists
+  - Configurable concurrency for parallel processing
+  - Skip existing videos or reprocess as needed
+  - Limit number of videos to process
+
+- **Artifact Caching**: Smart caching system
+  - Caches transcriptions, summaries, and visual analysis
+  - Reuses cached data for faster reprocessing
 
 ## Prerequisites
 
@@ -161,14 +176,19 @@ npm run dev -- https://www.youtube.com/watch?v=VIDEO_ID
 scrub <url> [options]
 
 Options:
-  -o, --output <path>       Output file path (default: ./output/{title}.md)
-  -t, --transcriber <name>  Force specific transcriber
-  --no-visuals              Skip visual analysis (faster, cheaper)
-  --scene-threshold <n>     Scene detection sensitivity (default: 0.4)
-  --max-frames <n>          Maximum frames to analyze (default: 20)
-  -v, --verbose             Show detailed progress
-  --dry-run                 Check prerequisites without processing
-  -h, --help                Display help
+  -o, --output <path>          Output file path (default: ./output/{title}.md)
+  -t, --transcriber <name>     Force specific transcriber
+  --no-visuals                 Skip visual analysis (faster, cheaper)
+  --scene-threshold <n>        Scene detection sensitivity (default: 0.4)
+  --max-frames <n>             Maximum frames to analyze (default: 20)
+  --output-skill               Generate SKILL.md from video content
+  --skill-name <name>          Custom skill name (auto-derived if not provided)
+  -v, --verbose                Show detailed progress
+  --dry-run                    Check prerequisites without processing
+  --max-videos <number>        Maximum videos to process from playlist
+  --parallel <number>          Process N videos in parallel (default: 1)
+  --no-skip-existing           Reprocess videos that already exist
+  -h, --help                   Display help
 ```
 
 ### Examples
@@ -188,6 +208,18 @@ scrub https://youtube.com/watch?v=xyz -t openai
 
 # Verbose output
 scrub https://youtube.com/watch?v=xyz -v
+
+# Generate an Agent Skill from video
+scrub https://youtube.com/watch?v=xyz --output-skill
+
+# Generate skill with custom name
+scrub https://youtube.com/watch?v=xyz --output-skill --skill-name "react-hooks"
+
+# Process a playlist (first 5 videos, 2 in parallel)
+scrub https://youtube.com/playlist?list=PLxyz --max-videos 5 --parallel 2
+
+# Reprocess existing videos in a playlist
+scrub https://youtube.com/playlist?list=PLxyz --no-skip-existing
 ```
 
 ### Diagnostic Commands
@@ -221,11 +253,12 @@ scrub doctor
 
 Once configured, MCP clients have access to these tools:
 
-| Tool                | Description                                   |
-| ------------------- | --------------------------------------------- |
-| `scrub_video`       | Process a YouTube URL into structured content |
-| `scrub_doctor`      | Check system prerequisites and configuration  |
-| `list_transcribers` | Show available transcription backends         |
+| Tool                | Description                                    |
+| ------------------- | ---------------------------------------------- |
+| `scrub_video`       | Process a YouTube URL into structured content  |
+| `scrub_playlist`    | Process entire playlists with parallel support |
+| `scrub_doctor`      | Check system prerequisites and configuration   |
+| `list_transcribers` | Show available transcription backends          |
 
 ### Usage Examples
 
@@ -241,6 +274,12 @@ scrub_video("https://youtube.com/watch?v=VIDEO_ID", outputFormat="transcript")
 # Fast processing without visual analysis
 scrub_video("https://youtube.com/watch?v=VIDEO_ID", skipVisuals=true)
 
+# Generate an Agent Skill from video
+scrub_video("https://youtube.com/watch?v=VIDEO_ID", outputSkill=true)
+
+# Process a playlist (5 videos, 2 in parallel)
+scrub_playlist("https://youtube.com/playlist?list=PLxyz", maxVideos=5, parallel=2)
+
 # Check system status
 scrub_doctor()
 ```
@@ -252,6 +291,8 @@ The `scrub_video` tool supports three output formats:
 - **summary** (default): Overview, sections with timestamps, key takeaways, code snippets
 - **transcript**: Raw transcript with timestamps - useful for detailed analysis
 - **full**: Complete ProcessResult with all metadata - for programmatic use
+
+Additionally, when `outputSkill=true`, generates a SKILL.md file containing an Agent Skill derived from the video content.
 
 ### Manual MCP Configuration
 
@@ -421,42 +462,51 @@ ANTHROPIC_API_KEY=sk-ant-your-key-here
 ```
 src/
   entrypoints/           # Driving adapters (how users access the app)
-    cli/                 # Command-line interface (Commander.js)
+    cli/                 # Command-line interface (Commander.js + Ink)
     mcp/                 # Model Context Protocol server for AI agents
 
   core/                  # Domain orchestration
-    VideoProcessor.ts    # Main processing pipeline coordinator
+    VideoProcessor.ts    # Main processing pipeline for single videos
+    PlaylistProcessor.ts # Orchestrates playlist processing with parallelism
 
   services/              # Domain services (business logic)
     Summarizer.ts        # Claude-powered content summarization
     VisualAnalyzer.ts    # Frame analysis with Claude Vision
     SceneDetector.ts     # FFmpeg-based scene change detection
     MarkdownGenerator.ts # Output formatting
+    SkillGenerator.ts    # Agent Skill generation from video content
+    VideoDownloader.ts   # yt-dlp wrapper for video acquisition
+    ArtifactStore.ts     # Persistent artifact storage and caching
+    PlaylistExtractor.ts # YouTube playlist metadata extraction
 
-  adapters/              # Driven adapters (external integrations)
-    transcription/       # Speech-to-text adapters
-      ITranscriber.ts    # Interface for all transcribers
-      TranscriberFactory.ts
+  transcription/         # Speech-to-text system
+    ITranscriber.ts      # Interface for all transcribers
+    TranscriberFactory.ts # Factory with priority ordering and fallback
+    adapters/            # Individual adapter implementations
       LocalWhisperAdapter.ts
       FasterWhisperAdapter.ts
       OpenAIWhisperAdapter.ts
       DeepgramAdapter.ts
       YouTubeCaptionsAdapter.ts
-    download/            # Video acquisition
-      VideoDownloader.ts # yt-dlp wrapper
 
   infrastructure/        # Cross-cutting concerns
-    Config.ts            # Configuration management
+    Config.ts            # Configuration management (env vars + config files)
 
   utils/                 # Shared utilities
+    logger.ts            # Logging utilities
+    helpers.ts           # Helper functions
+
   types/                 # TypeScript type definitions
+    index.ts             # Comprehensive type definitions
 ```
 
 The architecture follows **Hexagonal (Ports & Adapters)** patterns:
 
 - **Entrypoints** handle protocol-specific concerns (CLI args, MCP JSON-RPC)
 - **Core** contains protocol-agnostic business logic
-- **Adapters** isolate external dependencies behind interfaces
+- **Services** implement domain logic (summarization, visual analysis, etc.)
+- **Transcription** isolates speech-to-text behind a factory pattern
+- **Infrastructure** handles cross-cutting concerns like configuration
 
 ## Development
 
@@ -466,6 +516,9 @@ npm run dev -- https://youtube.com/watch?v=xyz
 
 # Type checking
 npm run typecheck
+
+# Run tests
+npm test
 
 # Build for production
 npm run build
