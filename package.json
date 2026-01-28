@@ -1,5 +1,5 @@
 {
-  "name": "scrub",
+  "name": "scrub-cli",
   "version": "0.1.0",
   "description": "Turn videos to Agent Skills in seconds.",
   "main": "dist/entrypoints/cli/index.js",
@@ -7,6 +7,14 @@
     "scrub": "./dist/entrypoints/cli/index.js",
     "scrub-mcp": "./dist/entrypoints/mcp/index.js"
   },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jona/scrub-cli"
+  },
+  "homepage": "https://github.com/jona/scrub-cli#readme",
   "type": "module",
   "scripts": {
     "build": "tsc",
