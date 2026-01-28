@@ -12,7 +12,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/jona/scrub-cli"
+    "url": "git+https://github.com/jona/scrub-cli.git"
   },
   "homepage": "https://github.com/jona/scrub-cli#readme",
   "type": "module",
