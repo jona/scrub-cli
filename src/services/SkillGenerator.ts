@@ -330,12 +330,14 @@ ${skillName}
 Generate a complete SKILL.md following the skill-creator guide format:
 
 1. Start with YAML frontmatter containing name and description
-2. The description should clearly explain when this skill should be triggered
-3. Fill identified gaps using reasonable inference from the video content
-4. Keep the skill under 500 lines total
-5. Include concrete examples and workflows from the video
-6. Use imperative/infinitive form for instructions
-7. Do NOT include installation guides, READMEs, or auxiliary documentation
+2. The name should be a concise 3-4 word kebab-case description of the skill's core topic (e.g., "ai-scientific-discovery-jumper", "startup-pricing-strategy")
+3. The description should clearly explain when this skill should be triggered
+4. IMPORTANT: The frontmatter description must not contain YAML-invalid characters like colons. Use alternative phrasing (e.g., "when users ask about X" instead of "Use when: users ask about X")
+5. Fill identified gaps using reasonable inference from the video content
+6. Keep the skill under 500 lines total
+7. Include concrete examples and workflows from the video
+8. Use imperative/infinitive form for instructions
+9. Do NOT include installation guides, READMEs, or auxiliary documentation
 
 The skill should be immediately usable by an AI agent. Focus on:
 - Clear trigger scenarios in the frontmatter description
