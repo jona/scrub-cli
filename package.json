@@ -1,6 +1,6 @@
 {
   "name": "scrub-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Turn videos into Agent Skills in seconds.",
   "main": "dist/entrypoints/cli/index.js",
   "bin": {
