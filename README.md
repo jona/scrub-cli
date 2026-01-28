@@ -1,5 +1,7 @@
 # Scrub
 
+![Scrub Banner](https://www.scrb.dev/og-banner.jpg)
+
 Turn YouTube videos into comprehensive summaries and Agent Skills in seconds. Perfect for quickly reviewing educational content, creating reference documentation, building a personal knowledge base, and generating reusable skills for AI agents.
 
 ## Features
