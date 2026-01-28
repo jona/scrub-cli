@@ -4,8 +4,8 @@
   "description": "Turn videos to Agent Skills in seconds.",
   "main": "dist/entrypoints/cli/index.js",
   "bin": {
-    "scrub": "./dist/entrypoints/cli/index.js",
-    "scrub-mcp": "./dist/entrypoints/mcp/index.js"
+    "scrub": "dist/entrypoints/cli/index.js",
+    "scrub-mcp": "dist/entrypoints/mcp/index.js"
   },
   "files": [
     "dist"
