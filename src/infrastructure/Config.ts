@@ -34,14 +34,14 @@ const VisualConfigSchema = z.object({
   enabled: z.boolean().default(true),
   sceneThreshold: z.number().min(0).max(1).default(0.4),
   maxFrames: z.number().min(1).max(100).default(20),
-  model: z.string().default("claude-opus-4-5-20251101"),
+  model: z.string().default("claude-opus-4-6"),
 });
 
 /**
  * Schema for summarizer configuration
  */
 const SummarizerConfigSchema = z.object({
-  model: z.string().default("claude-opus-4-5-20251101"),
+  model: z.string().default("claude-opus-4-6"),
 });
 
 /**
@@ -91,10 +91,10 @@ const DEFAULT_CONFIG: Config = {
     enabled: true,
     sceneThreshold: 0.4,
     maxFrames: 20,
-    model: "claude-opus-4-5-20251101",
+    model: "claude-opus-4-6",
   },
   summarizer: {
-    model: "claude-opus-4-5-20251101",
+    model: "claude-opus-4-6",
   },
   output: {
     directory: "./.output",

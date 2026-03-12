@@ -29,7 +29,7 @@ const INDEX_VERSION = "1.0.0";
  *
  * Directory structure:
  * .output/
- * ├── {videoId}/
+ * ├── {number}/          (sequential, assigned in order of creation)
  * │   ├── manifest.json
  * │   ├── source/
  * │   │   ├── audio.wav
@@ -52,9 +52,50 @@ const INDEX_VERSION = "1.0.0";
  */
 export class ArtifactStore {
   private outputDir: string;
+  private dirMap: Map<string, string> = new Map();
 
   constructor() {
     this.outputDir = config.getOutputDir();
+    this.loadDirMap();
+  }
+
+  /**
+   * Load the videoId -> directory name mapping from the index
+   */
+  private loadDirMap(): void {
+    this.dirMap.clear();
+    const indexPath = join(this.outputDir, "index.json");
+    if (!existsSync(indexPath)) return;
+
+    try {
+      const index: ArtifactIndex = JSON.parse(
+        readFileSync(indexPath, "utf-8")
+      );
+      for (const [videoId, entry] of Object.entries(index.videos)) {
+        this.dirMap.set(videoId, entry.outputPath);
+      }
+    } catch {
+      // Index doesn't exist or is invalid, start fresh
+    }
+  }
+
+  /**
+   * Get the next sequential directory number
+   */
+  private getNextDirNumber(): number {
+    return this.dirMap.size;
+  }
+
+  /**
+   * Get or assign the directory name for a video
+   */
+  private resolveDir(videoId: string): string {
+    let dirName = this.dirMap.get(videoId);
+    if (!dirName) {
+      dirName = String(this.getNextDirNumber());
+      this.dirMap.set(videoId, dirName);
+    }
+    return dirName;
   }
 
   /**
@@ -68,7 +109,7 @@ export class ArtifactStore {
    * Get the artifact directory for a specific video
    */
   getVideoDir(videoId: string): string {
-    return join(this.outputDir, videoId);
+    return join(this.outputDir, this.resolveDir(videoId));
   }
 
   /**
@@ -127,11 +168,10 @@ export class ArtifactStore {
   }
 
   /**
-   * Check if a video has been processed (has a manifest)
+   * Check if a video has been processed (exists in index)
    */
   hasVideo(videoId: string): boolean {
-    const manifestPath = join(this.getVideoDir(videoId), "manifest.json");
-    return existsSync(manifestPath);
+    return this.dirMap.has(videoId);
   }
 
   /**
@@ -472,7 +512,7 @@ export class ArtifactStore {
       title: metadata.title,
       url: metadata.url,
       processedAt: manifest.processedAt,
-      outputPath: videoId,
+      outputPath: this.resolveDir(videoId),
     });
 
     logger.info(`Finalized artifacts for ${videoId}`);
