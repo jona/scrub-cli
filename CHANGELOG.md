@@ -14,7 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CLI subcommands**: `scrub youtube`, `scrub file`, plus primitives (`scrub download`, `scrub prepare`, `scrub transcribe`, `scrub analyze-visuals`, `scrub summarize`)
 - **Consolidated summarize**: merged Summarizer, MarkdownGenerator, and SkillGenerator into a single `summarize` primitive with `--markdown` and `--skill` flags
 - `summarize` now accepts any file type (`.json`, `.txt`, `.md`) not just transcripts
-- MCP `scrub_video` tool now auto-detects and routes YouTube URLs vs local file paths
+- **Default output directory** moved from `./output` to `~/.scrub/docs` (global, per-user)
+- **Slugified output dirs**: artifact directories now use title-based slugs (e.g. `how-to-build-agents/`) instead of sequential numbers
+- YouTube metadata is now pre-fetched before download to avoid a redundant yt-dlp call
 
 ### Added
 
@@ -23,10 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `src/orchestrators/file.ts` — full pipeline for local media files
 - Visual analysis automatically skipped for `.mp3` files
 - Deterministic content IDs for local files (`local-` + sha256 hash)
+- `-o, --output-dir <path>` flag on `scrub youtube` and `scrub file` to override the default output directory
 
 ### Removed
 
 - `VideoProcessor`, `PlaylistProcessor`, `VideoDownloader`, `MarkdownGenerator`, `SkillGenerator`, `SceneDetector`, `VisualAnalyzer`, `Summarizer` classes (logic extracted into pure functions)
+- MCP server entrypoint, `scrub-mcp` binary, and `@modelcontextprotocol/sdk` dependency — agents should use CLI commands directly
 
 ## [0.1.1] - 2026-01-28
 
@@ -40,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - CLI tool for turning videos into Agent Skills
-- MCP server support
+- ~~MCP server support~~ (removed in 0.2.0)
 - YouTube transcript extraction
 - Playlist support with Ink rendering
 - Artifact storage system
