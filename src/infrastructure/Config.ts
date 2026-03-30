@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { readFileSync, existsSync } from "fs";
-import { resolve } from "path";
+import { resolve, join } from "path";
+import { homedir } from "os";
 import dotenv from "dotenv";
 
 // Load environment variables
@@ -48,7 +49,7 @@ const SummarizerConfigSchema = z.object({
  * Schema for output configuration
  */
 const OutputConfigSchema = z.object({
-  directory: z.string().default("./output"),
+  directory: z.string().default("~/.scrub/docs"),
   includeFullTranscript: z.boolean().default(false),
 });
 
@@ -97,7 +98,7 @@ const DEFAULT_CONFIG: Config = {
     model: "claude-opus-4-6",
   },
   output: {
-    directory: "./.output",
+    directory: "~/.scrub/docs",
     includeFullTranscript: false,
   },
   apis: {},
@@ -249,6 +250,16 @@ class ConfigManager {
   }
 
   /**
+   * Override the output directory at runtime (e.g. from CLI flags)
+   */
+  setOutputDir(directory: string): void {
+    this.config = {
+      ...this.config,
+      output: { ...this.config.output, directory },
+    };
+  }
+
+  /**
    * Get cache directory path
    */
   getCacheDir(): string {
@@ -259,7 +270,17 @@ class ConfigManager {
    * Get output directory path
    */
   getOutputDir(): string {
-    return resolve(process.cwd(), this.config.output.directory);
+    return this.resolvePath(this.config.output.directory);
+  }
+
+  /**
+   * Resolve a path, expanding ~ to the user's home directory
+   */
+  private resolvePath(p: string): string {
+    if (p.startsWith("~/") || p === "~") {
+      return join(homedir(), p.slice(2));
+    }
+    return resolve(process.cwd(), p);
   }
 }
 

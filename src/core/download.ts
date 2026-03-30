@@ -34,6 +34,8 @@ export interface DownloadOptions {
   skipVideo?: boolean;
   /** Max video resolution */
   maxResolution?: number;
+  /** Pre-fetched metadata (skips yt-dlp metadata fetch if provided) */
+  metadata?: MediaMetadata;
   onProgress?: (message: string) => void;
 }
 
@@ -55,13 +57,13 @@ export async function download(
     throw new Error(`Invalid YouTube URL: ${url}`);
   }
 
-  const { outputDir, skipVideo, maxResolution = 720, onProgress } = options;
+  const { outputDir, skipVideo, maxResolution = 720, metadata: preMetadata, onProgress } = options;
   const audioPath = `${outputDir}/audio.wav`;
   const videoPath = `${outputDir}/video.mp4`;
 
-  // Fetch metadata
+  // Fetch metadata (skip if pre-fetched)
   onProgress?.("Fetching video metadata...");
-  const metadata = await fetchYouTubeMetadata(url);
+  const metadata = preMetadata ?? await fetchYouTubeMetadata(url);
 
   // Download audio
   onProgress?.("Downloading audio...");

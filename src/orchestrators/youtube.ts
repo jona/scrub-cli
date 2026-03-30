@@ -8,7 +8,7 @@
 import { config } from "../infrastructure/Config.js";
 import { logger } from "../utils/logger.js";
 import { extractVideoId } from "../utils/helpers.js";
-import { download, isYtDlpAvailable, isFfmpegAvailable } from "../core/download.js";
+import { download, fetchYouTubeMetadata, isYtDlpAvailable, isFfmpegAvailable } from "../core/download.js";
 import { transcribe, getTranscriberDiagnostics } from "../core/transcribe.js";
 import { analyzeVisuals } from "../core/analyze-visuals.js";
 import { summarize } from "../core/summarize.js";
@@ -99,22 +99,24 @@ export async function processYouTube(
 
   try {
     // Step 1: Download
-    progress("download", 1, 5, "Downloading video...");
+    progress("download", 1, 5, "Fetching metadata...");
     const downloadStart = Date.now();
 
-    artifactStore.ensureVideoDirectories(contentId);
+    const metadata = await fetchYouTubeMetadata(url);
+    artifactStore.ensureVideoDirectories(contentId, metadata.title);
     const sourceDir = artifactStore.getSourceDir(contentId);
 
     const downloadResult = await download(url, {
       outputDir: sourceDir,
       skipVideo: skipVisuals,
+      metadata,
       onProgress: (msg) => progress("download", 1, 5, msg),
     });
 
     stats.downloadTime = Date.now() - downloadStart;
 
     // Save metadata
-    artifactStore.saveMetadata(contentId, downloadResult.metadata);
+    artifactStore.saveMetadata(contentId, metadata);
 
     // Step 2: Transcribe
     progress("transcribe", 2, 5, "Transcribing audio...");

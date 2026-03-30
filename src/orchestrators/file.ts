@@ -5,6 +5,7 @@
  * Manages artifact storage, caching, and progress callbacks.
  */
 
+import { basename, extname } from "path";
 import { config } from "../infrastructure/Config.js";
 import { logger } from "../utils/logger.js";
 import { prepare, generateContentId, getLocalFileType } from "../core/prepare.js";
@@ -60,6 +61,7 @@ export async function processFile(
   if (!skipVisuals && !visualConfig.enabled) skipVisuals = true;
 
   const contentId = generateContentId(filePath);
+  const title = basename(filePath, extname(filePath));
 
   const progress = (stage: string, step: number, total: number, message: string) => {
     options.onProgress?.({ stage, progress: (step / total) * 100, message });
@@ -70,7 +72,7 @@ export async function processFile(
     progress("download", 1, 5, "Preparing local file...");
     const prepareStart = Date.now();
 
-    artifactStore.ensureVideoDirectories(contentId);
+    artifactStore.ensureVideoDirectories(contentId, title);
     const sourceDir = artifactStore.getSourceDir(contentId);
 
     const prepareResult = await prepare(filePath, {

@@ -150,6 +150,17 @@ export function sanitizeFilename(name: string): string {
 }
 
 /**
+ * Convert a title to a URL/directory-safe slug
+ */
+export function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .substring(0, 100);
+}
+
+/**
  * Sleep for a given number of milliseconds
  */
 export function sleep(ms: number): Promise<void> {

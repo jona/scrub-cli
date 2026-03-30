@@ -23,6 +23,7 @@ import {
 } from "../../core/transcribe.js";
 import { analyzeVisuals } from "../../core/analyze-visuals.js";
 import { summarize } from "../../core/summarize.js";
+import { artifactStore } from "../../services/ArtifactStore.js";
 import { App } from "./components/App.js";
 import type { TranscriptionSource } from "../../transcription/ITranscriber.js";
 
@@ -41,7 +42,7 @@ program
   .command("youtube")
   .description("Process a YouTube video or playlist through the full pipeline")
   .argument("<url>", "YouTube video or playlist URL")
-  .option("-o, --output <path>", "Output file path")
+  .option("-o, --output-dir <path>", "Output directory for artifacts")
   .option(
     "-t, --transcriber <name>",
     "Force specific transcriber (local-whisper, faster-whisper, openai, deepgram, youtube-captions)"
@@ -69,6 +70,10 @@ program
   .option("--no-skip-existing", "Reprocess videos that already exist")
   .action(async (url: string, options) => {
     if (options.verbose) logger.setVerbose(true);
+    if (options.outputDir) {
+      config.setOutputDir(options.outputDir);
+      artifactStore.reinitialize();
+    }
 
     try {
       const prereqs = await checkYouTubePrerequisites();
@@ -117,6 +122,7 @@ program
   .command("file")
   .description("Process a local .mp3 or .mp4 file through the full pipeline")
   .argument("<path>", "Path to local .mp3 or .mp4 file")
+  .option("-o, --output-dir <path>", "Output directory for artifacts")
   .option(
     "-t, --transcriber <name>",
     "Force specific transcriber (local-whisper, faster-whisper, openai, deepgram)"
@@ -133,6 +139,10 @@ program
   .option("-v, --verbose", "Show detailed progress")
   .action(async (filePath: string, options) => {
     if (options.verbose) logger.setVerbose(true);
+    if (options.outputDir) {
+      config.setOutputDir(options.outputDir);
+      artifactStore.reinitialize();
+    }
 
     try {
       const prereqs = await checkFilePrerequisites();

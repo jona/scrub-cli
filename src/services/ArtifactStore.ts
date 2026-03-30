@@ -8,6 +8,7 @@ import {
 } from "fs";
 import { config } from "../infrastructure/Config.js";
 import { logger } from "../utils/logger.js";
+import { slugify } from "../utils/helpers.js";
 import type {
   ArtifactManifest,
   ArtifactIndex,
@@ -81,22 +82,35 @@ export class ArtifactStore {
   }
 
   /**
-   * Get the next sequential directory number
-   */
-  private getNextDirNumber(): number {
-    return this.dirMap.size;
-  }
-
-  /**
    * Get or assign the directory name for a video
    */
-  private resolveDir(contentId: string): string {
+  private resolveDir(contentId: string, title?: string): string {
     let dirName = this.dirMap.get(contentId);
     if (!dirName) {
-      dirName = String(this.getNextDirNumber());
+      const base = title ? slugify(title) : contentId;
+      dirName = this.uniqueDirName(base);
       this.dirMap.set(contentId, dirName);
     }
     return dirName;
+  }
+
+  /**
+   * Ensure a directory name is unique within the output dir
+   */
+  private uniqueDirName(base: string): string {
+    const existing = new Set(this.dirMap.values());
+    if (!existing.has(base)) return base;
+    let i = 2;
+    while (existing.has(`${base}-${i}`)) i++;
+    return `${base}-${i}`;
+  }
+
+  /**
+   * Re-read config and reload the dir map (call after config.setOutputDir)
+   */
+  reinitialize(): void {
+    this.outputDir = config.getOutputDir();
+    this.loadDirMap();
   }
 
   /**
@@ -109,8 +123,8 @@ export class ArtifactStore {
   /**
    * Get the artifact directory for a specific video
    */
-  getVideoDir(contentId: string): string {
-    return join(this.outputDir, this.resolveDir(contentId));
+  getVideoDir(contentId: string, title?: string): string {
+    return join(this.outputDir, this.resolveDir(contentId, title));
   }
 
   /**
@@ -151,9 +165,9 @@ export class ArtifactStore {
   /**
    * Ensure all directories exist for a video
    */
-  ensureVideoDirectories(contentId: string): void {
+  ensureVideoDirectories(contentId: string, title?: string): void {
     const dirs = [
-      this.getVideoDir(contentId),
+      this.getVideoDir(contentId, title),
       this.getSourceDir(contentId),
       this.getFramesDir(contentId),
       this.getTranscriptionDir(contentId),
