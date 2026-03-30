@@ -234,101 +234,6 @@ scrub doctor
 scrub transcribers
 ```
 
-## MCP Integration (WIP - Not fully tested)
-
-Scrub can be used as an MCP (Model Context Protocol) server, allowing AI agents to extract content from YouTube videos for context, skills, and knowledge building.
-
-### Installation
-
-```bash
-# 1. Build scrub
-npm run build
-
-# 2. Verify prerequisites are available
-scrub doctor
-
-# 3. Add to your MCP client (e.g., Claude Desktop, Cursor, etc.)
-# See Manual MCP Configuration below
-```
-
-### Available Tools
-
-Once configured, MCP clients have access to these tools:
-
-| Tool                | Description                                    |
-| ------------------- | ---------------------------------------------- |
-| `scrub_video`       | Process a YouTube URL into structured content  |
-| `scrub_playlist`    | Process entire playlists with parallel support |
-| `scrub_doctor`      | Check system prerequisites and configuration   |
-| `list_transcribers` | Show available transcription backends          |
-
-### Usage Examples
-
-Agents can use scrub like this:
-
-```
-# Extract video content for context
-scrub_video("https://youtube.com/watch?v=VIDEO_ID")
-
-# Get just the transcript
-scrub_video("https://youtube.com/watch?v=VIDEO_ID", outputFormat="transcript")
-
-# Fast processing without visual analysis
-scrub_video("https://youtube.com/watch?v=VIDEO_ID", skipVisuals=true)
-
-# Generate an Agent Skill from video
-scrub_video("https://youtube.com/watch?v=VIDEO_ID", outputSkill=true)
-
-# Process a playlist (5 videos, 2 in parallel)
-scrub_playlist("https://youtube.com/playlist?list=PLxyz", maxVideos=5, parallel=2)
-
-# Check system status
-scrub_doctor()
-```
-
-### Output Formats
-
-The `scrub_video` tool supports three output formats:
-
-- **summary** (default): Overview, sections with timestamps, key takeaways, code snippets
-- **transcript**: Raw transcript with timestamps - useful for detailed analysis
-- **full**: Complete ProcessResult with all metadata - for programmatic use
-
-Additionally, when `outputSkill=true`, generates a SKILL.md file containing an Agent Skill derived from the video content.
-
-### Manual MCP Configuration
-
-Add this to your MCP client configuration (e.g., `~/.cursor/mcp.json` for Cursor, `claude_desktop_config.json` for Claude Desktop):
-
-```json
-{
-  "mcpServers": {
-    "scrub": {
-      "command": "node",
-      "args": ["/path/to/scrub/dist/entrypoints/mcp/index.js"],
-      "env": {
-        "ANTHROPIC_API_KEY": "sk-ant-..."
-      }
-    }
-  }
-}
-```
-
-Or if installed globally via `npm link`:
-
-```json
-{
-  "mcpServers": {
-    "scrub": {
-      "command": "scrub-mcp",
-      "env": {
-        "ANTHROPIC_API_KEY": "sk-ant-..."
-      }
-    }
-  }
-}
-```
-
 ## Output Format
 
 Generated markdown files include:
@@ -465,7 +370,6 @@ ANTHROPIC_API_KEY=sk-ant-your-key-here
 src/
   entrypoints/           # Driving adapters (how users access the app)
     cli/                 # Command-line interface (Commander.js + Ink)
-    mcp/                 # Model Context Protocol server for AI agents
 
   core/                  # Domain orchestration
     VideoProcessor.ts    # Main processing pipeline for single videos
@@ -504,7 +408,7 @@ src/
 
 The architecture follows **Hexagonal (Ports & Adapters)** patterns:
 
-- **Entrypoints** handle protocol-specific concerns (CLI args, MCP JSON-RPC)
+- **Entrypoints** handle protocol-specific concerns (CLI args)
 - **Core** contains protocol-agnostic business logic
 - **Services** implement domain logic (summarization, visual analysis, etc.)
 - **Transcription** isolates speech-to-text behind a factory pattern
@@ -539,4 +443,3 @@ MIT
 - [whisper.cpp](https://github.com/ggerganov/whisper.cpp) - Local speech recognition
 - [faster-whisper](https://github.com/guillaumekln/faster-whisper) - Optimized Whisper
 - [Anthropic Claude](https://www.anthropic.com/) - AI summarization and vision
-- [MCP SDK](https://github.com/modelcontextprotocol/typescript-sdk) - Model Context Protocol integration
