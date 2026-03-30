@@ -2,7 +2,7 @@
  * Output formatters for agent-friendly responses
  */
 
-import type { ProcessResult } from "../../core/VideoProcessor.js";
+import type { ProcessResult } from "../../orchestrators/youtube.js";
 import type { OutputFormat } from "./tools.js";
 
 /**
@@ -93,7 +93,7 @@ function formatSummary(result: ProcessResult): SummaryOutput {
   const output: SummaryOutput = {
     title: result.metadata.title,
     source: result.metadata.url,
-    channel: result.metadata.channelName,
+    channel: result.metadata.source,
     duration: formatTimestamp(result.metadata.duration),
     overview: result.summary.overview,
     sections: result.summary.sections.map((section) => ({

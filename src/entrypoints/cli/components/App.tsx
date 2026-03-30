@@ -2,9 +2,9 @@ import { useState, useEffect } from "react";
 import { Box, Text, Newline } from "ink";
 import { PlaylistProgress } from "./PlaylistProgress.js";
 import {
-  playlistProcessor,
-  PlaylistProcessOptions,
-} from "../../../core/PlaylistProcessor.js";
+  processYouTubePlaylist,
+  type YouTubePlaylistOptions,
+} from "../../../orchestrators/youtube.js";
 import type {
   PlaylistVideoStatus,
   PlaylistVideoStatusType,
@@ -13,17 +13,13 @@ import type {
 
 interface AppProps {
   url: string;
-  options: Omit<PlaylistProcessOptions, "onStart" | "onProgress">;
+  options: Omit<YouTubePlaylistOptions, "onStart" | "onProgress">;
   onComplete?: (result: PlaylistProcessResult) => void;
   onError?: (error: Error) => void;
 }
 
 type AppState = "loading" | "processing" | "completed" | "error";
 
-/**
- * Main Ink application for CLI
- * Manages state and renders progress
- */
 export function App({ url, options, onComplete, onError }: AppProps) {
   const [state, setState] = useState<AppState>("loading");
   const [videos, setVideos] = useState<PlaylistVideoStatus[]>([]);
@@ -34,7 +30,7 @@ export function App({ url, options, onComplete, onError }: AppProps) {
   useEffect(() => {
     async function run() {
       try {
-        const processResult = await playlistProcessor.processPlaylist(url, {
+        const processResult = await processYouTubePlaylist(url, {
           ...options,
           onStart: (initialVideos, count) => {
             setVideos(initialVideos);
@@ -42,13 +38,13 @@ export function App({ url, options, onComplete, onError }: AppProps) {
             setState("processing");
           },
           onProgress: (
-            videoId: string,
+            contentId: string,
             status: PlaylistVideoStatusType,
             stage?: string
           ) => {
             setVideos((prev) =>
               prev.map((v) =>
-                v.videoId === videoId ? { ...v, status, stage } : v
+                v.contentId === contentId ? { ...v, status, stage } : v
               )
             );
           },
@@ -85,7 +81,7 @@ function Header() {
       <Text bold color="cyan">
         {"  "}Scrub
       </Text>
-      <Text dimColor>{"  "}Turn videos into knowledge bases for AI agents</Text>
+      <Text dimColor>{"  "}Turn audio & video into knowledge bases for AI agents</Text>
     </Box>
   );
 }

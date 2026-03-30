@@ -27,7 +27,7 @@ export function PlaylistProgress({ videos, total }: PlaylistProgressProps) {
     <Box flexDirection="column">
       {videos.map((video, i) => (
         <VideoStatusLine
-          key={video.videoId}
+          key={video.contentId}
           video={video}
           index={i + 1}
           total={total}

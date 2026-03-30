@@ -13,7 +13,7 @@ import type {
   ArtifactIndex,
   ArtifactIndexEntry,
   ArtifactType,
-  VideoMetadata,
+  MediaMetadata,
   SummaryResult,
   VisualAnalysis,
   SkillChecklist,
@@ -52,7 +52,7 @@ const INDEX_VERSION = "1.0.0";
  */
 export class ArtifactStore {
   private outputDir: string;
-  private dirMap: Map<string, string> = new Map();
+  private dirMap: Map<string, string> = new Map(); // contentId → directory name
 
   constructor() {
     this.outputDir = config.getOutputDir();
@@ -60,7 +60,7 @@ export class ArtifactStore {
   }
 
   /**
-   * Load the videoId -> directory name mapping from the index
+   * Load the contentId -> directory name mapping from the index
    */
   private loadDirMap(): void {
     this.dirMap.clear();
@@ -71,8 +71,9 @@ export class ArtifactStore {
       const index: ArtifactIndex = JSON.parse(
         readFileSync(indexPath, "utf-8")
       );
-      for (const [videoId, entry] of Object.entries(index.videos)) {
-        this.dirMap.set(videoId, entry.outputPath);
+      const entries = index.media ?? (index as any).videos ?? {};
+      for (const [contentId, entry] of Object.entries(entries)) {
+        this.dirMap.set(contentId, (entry as ArtifactIndexEntry).outputPath);
       }
     } catch {
       // Index doesn't exist or is invalid, start fresh
@@ -89,11 +90,11 @@ export class ArtifactStore {
   /**
    * Get or assign the directory name for a video
    */
-  private resolveDir(videoId: string): string {
-    let dirName = this.dirMap.get(videoId);
+  private resolveDir(contentId: string): string {
+    let dirName = this.dirMap.get(contentId);
     if (!dirName) {
       dirName = String(this.getNextDirNumber());
-      this.dirMap.set(videoId, dirName);
+      this.dirMap.set(contentId, dirName);
     }
     return dirName;
   }
@@ -108,56 +109,56 @@ export class ArtifactStore {
   /**
    * Get the artifact directory for a specific video
    */
-  getVideoDir(videoId: string): string {
-    return join(this.outputDir, this.resolveDir(videoId));
+  getVideoDir(contentId: string): string {
+    return join(this.outputDir, this.resolveDir(contentId));
   }
 
   /**
    * Get the source directory for a video (audio, video, metadata)
    */
-  getSourceDir(videoId: string): string {
-    return join(this.getVideoDir(videoId), "source");
+  getSourceDir(contentId: string): string {
+    return join(this.getVideoDir(contentId), "source");
   }
 
   /**
    * Get the frames directory for a video
    */
-  getFramesDir(videoId: string): string {
-    return join(this.getVideoDir(videoId), "frames");
+  getFramesDir(contentId: string): string {
+    return join(this.getVideoDir(contentId), "frames");
   }
 
   /**
    * Get the transcription directory for a video
    */
-  getTranscriptionDir(videoId: string): string {
-    return join(this.getVideoDir(videoId), "transcription");
+  getTranscriptionDir(contentId: string): string {
+    return join(this.getVideoDir(contentId), "transcription");
   }
 
   /**
    * Get the inference directory for a video
    */
-  getInferenceDir(videoId: string): string {
-    return join(this.getVideoDir(videoId), "inference");
+  getInferenceDir(contentId: string): string {
+    return join(this.getVideoDir(contentId), "inference");
   }
 
   /**
    * Get the output directory for a video (markdown, skill)
    */
-  getOutputSubdir(videoId: string): string {
-    return join(this.getVideoDir(videoId), "output");
+  getOutputSubdir(contentId: string): string {
+    return join(this.getVideoDir(contentId), "output");
   }
 
   /**
    * Ensure all directories exist for a video
    */
-  ensureVideoDirectories(videoId: string): void {
+  ensureVideoDirectories(contentId: string): void {
     const dirs = [
-      this.getVideoDir(videoId),
-      this.getSourceDir(videoId),
-      this.getFramesDir(videoId),
-      this.getTranscriptionDir(videoId),
-      this.getInferenceDir(videoId),
-      this.getOutputSubdir(videoId),
+      this.getVideoDir(contentId),
+      this.getSourceDir(contentId),
+      this.getFramesDir(contentId),
+      this.getTranscriptionDir(contentId),
+      this.getInferenceDir(contentId),
+      this.getOutputSubdir(contentId),
     ];
 
     for (const dir of dirs) {
@@ -170,23 +171,23 @@ export class ArtifactStore {
   /**
    * Check if a video has been processed (exists in index)
    */
-  hasVideo(videoId: string): boolean {
-    return this.dirMap.has(videoId);
+  hasVideo(contentId: string): boolean {
+    return this.dirMap.has(contentId);
   }
 
   /**
    * Check if a specific artifact exists
    */
-  hasArtifact(videoId: string, type: ArtifactType): boolean {
-    const path = this.getArtifactPath(videoId, type);
+  hasArtifact(contentId: string, type: ArtifactType): boolean {
+    const path = this.getArtifactPath(contentId, type);
     return existsSync(path);
   }
 
   /**
    * Get the file path for a specific artifact type
    */
-  getArtifactPath(videoId: string, type: ArtifactType): string {
-    const videoDir = this.getVideoDir(videoId);
+  getArtifactPath(contentId: string, type: ArtifactType): string {
+    const videoDir = this.getVideoDir(contentId);
 
     switch (type) {
       case "source/audio":
@@ -219,9 +220,9 @@ export class ArtifactStore {
   /**
    * Save video metadata
    */
-  saveMetadata(videoId: string, metadata: VideoMetadata): void {
-    this.ensureVideoDirectories(videoId);
-    const path = this.getArtifactPath(videoId, "source/metadata");
+  saveMetadata(contentId: string, metadata: MediaMetadata): void {
+    this.ensureVideoDirectories(contentId);
+    const path = this.getArtifactPath(contentId, "source/metadata");
     writeFileSync(path, JSON.stringify(metadata, null, 2), "utf-8");
     logger.debug(`Saved metadata to ${path}`);
   }
@@ -229,8 +230,8 @@ export class ArtifactStore {
   /**
    * Load video metadata
    */
-  loadMetadata(videoId: string): VideoMetadata | null {
-    const path = this.getArtifactPath(videoId, "source/metadata");
+  loadMetadata(contentId: string): MediaMetadata | null {
+    const path = this.getArtifactPath(contentId, "source/metadata");
     if (!existsSync(path)) return null;
     return JSON.parse(readFileSync(path, "utf-8"));
   }
@@ -238,16 +239,16 @@ export class ArtifactStore {
   /**
    * Save transcription result (both JSON and plain text)
    */
-  saveTranscription(videoId: string, transcript: TranscriptionResult): void {
-    this.ensureVideoDirectories(videoId);
+  saveTranscription(contentId: string, transcript: TranscriptionResult): void {
+    this.ensureVideoDirectories(contentId);
 
     // Save JSON format
-    const jsonPath = this.getArtifactPath(videoId, "transcription/json");
+    const jsonPath = this.getArtifactPath(contentId, "transcription/json");
     writeFileSync(jsonPath, JSON.stringify(transcript, null, 2), "utf-8");
     logger.debug(`Saved transcript JSON to ${jsonPath}`);
 
     // Save plain text format
-    const txtPath = this.getArtifactPath(videoId, "transcription/txt");
+    const txtPath = this.getArtifactPath(contentId, "transcription/txt");
     writeFileSync(txtPath, transcript.fullText, "utf-8");
     logger.debug(`Saved transcript text to ${txtPath}`);
   }
@@ -255,8 +256,8 @@ export class ArtifactStore {
   /**
    * Load transcription result
    */
-  loadTranscription(videoId: string): TranscriptionResult | null {
-    const path = this.getArtifactPath(videoId, "transcription/json");
+  loadTranscription(contentId: string): TranscriptionResult | null {
+    const path = this.getArtifactPath(contentId, "transcription/json");
     if (!existsSync(path)) return null;
     return JSON.parse(readFileSync(path, "utf-8"));
   }
@@ -264,9 +265,9 @@ export class ArtifactStore {
   /**
    * Save summary result
    */
-  saveSummary(videoId: string, summary: SummaryResult): void {
-    this.ensureVideoDirectories(videoId);
-    const path = this.getArtifactPath(videoId, "inference/summary");
+  saveSummary(contentId: string, summary: SummaryResult): void {
+    this.ensureVideoDirectories(contentId);
+    const path = this.getArtifactPath(contentId, "inference/summary");
     writeFileSync(path, JSON.stringify(summary, null, 2), "utf-8");
     logger.debug(`Saved summary to ${path}`);
   }
@@ -274,8 +275,8 @@ export class ArtifactStore {
   /**
    * Load summary result
    */
-  loadSummary(videoId: string): SummaryResult | null {
-    const path = this.getArtifactPath(videoId, "inference/summary");
+  loadSummary(contentId: string): SummaryResult | null {
+    const path = this.getArtifactPath(contentId, "inference/summary");
     if (!existsSync(path)) return null;
     return JSON.parse(readFileSync(path, "utf-8"));
   }
@@ -283,9 +284,9 @@ export class ArtifactStore {
   /**
    * Save visual analysis results
    */
-  saveVisualAnalysis(videoId: string, visuals: VisualAnalysis[]): void {
-    this.ensureVideoDirectories(videoId);
-    const path = this.getArtifactPath(videoId, "inference/visual_analysis");
+  saveVisualAnalysis(contentId: string, visuals: VisualAnalysis[]): void {
+    this.ensureVideoDirectories(contentId);
+    const path = this.getArtifactPath(contentId, "inference/visual_analysis");
     writeFileSync(path, JSON.stringify(visuals, null, 2), "utf-8");
     logger.debug(`Saved visual analysis to ${path}`);
   }
@@ -293,8 +294,8 @@ export class ArtifactStore {
   /**
    * Load visual analysis results
    */
-  loadVisualAnalysis(videoId: string): VisualAnalysis[] | null {
-    const path = this.getArtifactPath(videoId, "inference/visual_analysis");
+  loadVisualAnalysis(contentId: string): VisualAnalysis[] | null {
+    const path = this.getArtifactPath(contentId, "inference/visual_analysis");
     if (!existsSync(path)) return null;
     return JSON.parse(readFileSync(path, "utf-8"));
   }
@@ -302,9 +303,9 @@ export class ArtifactStore {
   /**
    * Save skill checklist
    */
-  saveSkillChecklist(videoId: string, checklist: SkillChecklist): void {
-    this.ensureVideoDirectories(videoId);
-    const path = this.getArtifactPath(videoId, "inference/skill_checklist");
+  saveSkillChecklist(contentId: string, checklist: SkillChecklist): void {
+    this.ensureVideoDirectories(contentId);
+    const path = this.getArtifactPath(contentId, "inference/skill_checklist");
     writeFileSync(path, JSON.stringify(checklist, null, 2), "utf-8");
     logger.debug(`Saved skill checklist to ${path}`);
   }
@@ -312,8 +313,8 @@ export class ArtifactStore {
   /**
    * Load skill checklist
    */
-  loadSkillChecklist(videoId: string): SkillChecklist | null {
-    const path = this.getArtifactPath(videoId, "inference/skill_checklist");
+  loadSkillChecklist(contentId: string): SkillChecklist | null {
+    const path = this.getArtifactPath(contentId, "inference/skill_checklist");
     if (!existsSync(path)) return null;
     return JSON.parse(readFileSync(path, "utf-8"));
   }
@@ -321,9 +322,9 @@ export class ArtifactStore {
   /**
    * Save markdown output
    */
-  saveMarkdown(videoId: string, markdown: string): string {
-    this.ensureVideoDirectories(videoId);
-    const path = this.getArtifactPath(videoId, "output/markdown");
+  saveMarkdown(contentId: string, markdown: string): string {
+    this.ensureVideoDirectories(contentId);
+    const path = this.getArtifactPath(contentId, "output/markdown");
     writeFileSync(path, markdown, "utf-8");
     logger.debug(`Saved markdown to ${path}`);
     return path;
@@ -332,8 +333,8 @@ export class ArtifactStore {
   /**
    * Load markdown output
    */
-  loadMarkdown(videoId: string): string | null {
-    const path = this.getArtifactPath(videoId, "output/markdown");
+  loadMarkdown(contentId: string): string | null {
+    const path = this.getArtifactPath(contentId, "output/markdown");
     if (!existsSync(path)) return null;
     return readFileSync(path, "utf-8");
   }
@@ -341,9 +342,9 @@ export class ArtifactStore {
   /**
    * Save skill file
    */
-  saveSkill(videoId: string, skillMd: string): string {
-    this.ensureVideoDirectories(videoId);
-    const path = this.getArtifactPath(videoId, "output/skill");
+  saveSkill(contentId: string, skillMd: string): string {
+    this.ensureVideoDirectories(contentId);
+    const path = this.getArtifactPath(contentId, "output/skill");
     writeFileSync(path, skillMd, "utf-8");
     logger.debug(`Saved skill to ${path}`);
     return path;
@@ -352,8 +353,8 @@ export class ArtifactStore {
   /**
    * Get list of frame paths in the frames directory
    */
-  getFramePaths(videoId: string): string[] {
-    const framesDir = this.getFramesDir(videoId);
+  getFramePaths(contentId: string): string[] {
+    const framesDir = this.getFramesDir(contentId);
     if (!existsSync(framesDir)) return [];
 
     return readdirSync(framesDir)
@@ -365,9 +366,9 @@ export class ArtifactStore {
   /**
    * Save the manifest for a video
    */
-  saveManifest(videoId: string, manifest: ArtifactManifest): void {
-    this.ensureVideoDirectories(videoId);
-    const path = join(this.getVideoDir(videoId), "manifest.json");
+  saveManifest(contentId: string, manifest: ArtifactManifest): void {
+    this.ensureVideoDirectories(contentId);
+    const path = join(this.getVideoDir(contentId), "manifest.json");
     writeFileSync(path, JSON.stringify(manifest, null, 2), "utf-8");
     logger.debug(`Saved manifest to ${path}`);
   }
@@ -375,8 +376,8 @@ export class ArtifactStore {
   /**
    * Load the manifest for a video
    */
-  loadManifest(videoId: string): ArtifactManifest | null {
-    const path = join(this.getVideoDir(videoId), "manifest.json");
+  loadManifest(contentId: string): ArtifactManifest | null {
+    const path = join(this.getVideoDir(contentId), "manifest.json");
     if (!existsSync(path)) return null;
     return JSON.parse(readFileSync(path, "utf-8"));
   }
@@ -385,49 +386,49 @@ export class ArtifactStore {
    * Create a manifest from current artifacts
    */
   createManifest(
-    videoId: string,
-    metadata: VideoMetadata,
+    contentId: string,
+    metadata: MediaMetadata,
     transcriptionSource: string | null,
     stats: ArtifactManifest["stats"],
     sourcePlaylist?: SourcePlaylist
   ): ArtifactManifest {
-    const framePaths = this.getFramePaths(videoId);
+    const framePaths = this.getFramePaths(contentId);
 
     const manifest: ArtifactManifest = {
-      videoId,
+      contentId,
       url: metadata.url,
       title: metadata.title,
       processedAt: new Date().toISOString(),
       pipelineVersion: PIPELINE_VERSION,
       artifacts: {
         source: {
-          audio: this.hasArtifact(videoId, "source/audio"),
-          video: this.hasArtifact(videoId, "source/video"),
-          metadata: this.hasArtifact(videoId, "source/metadata"),
+          audio: this.hasArtifact(contentId, "source/audio"),
+          video: this.hasArtifact(contentId, "source/video"),
+          metadata: this.hasArtifact(contentId, "source/metadata"),
         },
         frames: {
           count: framePaths.length,
-          paths: framePaths.map((p) => relative(this.getVideoDir(videoId), p)),
+          paths: framePaths.map((p) => relative(this.getVideoDir(contentId), p)),
         },
         transcription: {
           source: transcriptionSource,
-          hasJson: this.hasArtifact(videoId, "transcription/json"),
-          hasTxt: this.hasArtifact(videoId, "transcription/txt"),
+          hasJson: this.hasArtifact(contentId, "transcription/json"),
+          hasTxt: this.hasArtifact(contentId, "transcription/txt"),
         },
         inference: {
-          summary: this.hasArtifact(videoId, "inference/summary"),
+          summary: this.hasArtifact(contentId, "inference/summary"),
           visualAnalysis: this.hasArtifact(
-            videoId,
+            contentId,
             "inference/visual_analysis"
           ),
           skillChecklist: this.hasArtifact(
-            videoId,
+            contentId,
             "inference/skill_checklist"
           ),
         },
         output: {
-          markdown: this.hasArtifact(videoId, "output/markdown"),
-          skill: this.hasArtifact(videoId, "output/skill"),
+          markdown: this.hasArtifact(contentId, "output/markdown"),
+          skill: this.hasArtifact(contentId, "output/skill"),
         },
       },
       stats,
@@ -443,9 +444,9 @@ export class ArtifactStore {
   /**
    * Save processing stats
    */
-  saveStats(videoId: string, stats: ArtifactManifest["stats"]): void {
-    this.ensureVideoDirectories(videoId);
-    const path = join(this.getVideoDir(videoId), "stats.json");
+  saveStats(contentId: string, stats: ArtifactManifest["stats"]): void {
+    this.ensureVideoDirectories(contentId);
+    const path = join(this.getVideoDir(contentId), "stats.json");
     writeFileSync(path, JSON.stringify(stats, null, 2), "utf-8");
     logger.debug(`Saved stats to ${path}`);
   }
@@ -460,7 +461,7 @@ export class ArtifactStore {
       return {
         version: INDEX_VERSION,
         lastUpdated: new Date().toISOString(),
-        videos: {},
+        media: {},
       };
     }
 
@@ -470,10 +471,10 @@ export class ArtifactStore {
   /**
    * Update the global index with a new video entry
    */
-  updateIndex(videoId: string, entry: ArtifactIndexEntry): void {
+  updateIndex(contentId: string, entry: ArtifactIndexEntry): void {
     const index = this.getIndex();
 
-    index.videos[videoId] = entry;
+    index.media[contentId] = entry;
     index.lastUpdated = new Date().toISOString();
 
     const indexPath = join(this.outputDir, "index.json");
@@ -488,34 +489,34 @@ export class ArtifactStore {
    * Finalize artifacts for a video - creates manifest and updates index
    */
   finalizeArtifacts(
-    videoId: string,
-    metadata: VideoMetadata,
+    contentId: string,
+    metadata: MediaMetadata,
     transcriptionSource: string | null,
     stats: ArtifactManifest["stats"],
     sourcePlaylist?: SourcePlaylist
   ): void {
     // Create and save manifest
     const manifest = this.createManifest(
-      videoId,
+      contentId,
       metadata,
       transcriptionSource,
       stats,
       sourcePlaylist
     );
-    this.saveManifest(videoId, manifest);
+    this.saveManifest(contentId, manifest);
 
     // Save stats separately for quick access
-    this.saveStats(videoId, stats);
+    this.saveStats(contentId, stats);
 
     // Update global index
-    this.updateIndex(videoId, {
+    this.updateIndex(contentId, {
       title: metadata.title,
       url: metadata.url,
       processedAt: manifest.processedAt,
-      outputPath: this.resolveDir(videoId),
+      outputPath: this.resolveDir(contentId),
     });
 
-    logger.info(`Finalized artifacts for ${videoId}`);
+    logger.info(`Finalized artifacts for ${contentId}`);
   }
 
   /**
@@ -523,7 +524,7 @@ export class ArtifactStore {
    */
   listVideoIds(): string[] {
     const index = this.getIndex();
-    return Object.keys(index.videos);
+    return Object.keys(index.media);
   }
 }
 

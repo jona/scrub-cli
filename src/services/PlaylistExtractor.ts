@@ -61,15 +61,15 @@ export class PlaylistExtractor {
    * Parse a YouTube URL to determine its type
    */
   parseUrl(url: string): {
-    videoId: string | null;
+    contentId: string | null;
     playlistId: string | null;
     isPlaylist: boolean;
   } {
-    const videoId = extractVideoId(url);
+    const contentId = extractVideoId(url);
     const playlistId = this.extractPlaylistId(url);
 
     return {
-      videoId,
+      contentId,
       playlistId,
       isPlaylist: playlistId !== null,
     };
@@ -119,7 +119,7 @@ export class PlaylistExtractor {
     };
 
     let entries: PlaylistEntry[] = raw.entries.map((entry, index) => ({
-      videoId: entry.id,
+      contentId: entry.id,
       title: entry.title,
       duration: entry.duration || 0,
       position: entry.playlist_index || index + 1,
@@ -167,7 +167,7 @@ export class PlaylistExtractor {
 
     const entries: PlaylistEntry[] = [
       {
-        videoId: raw.id,
+        contentId: raw.id,
         title: raw.title,
         duration: raw.duration || 0,
         position: 1,

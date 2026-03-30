@@ -3,24 +3,24 @@
  */
 
 /**
- * Video metadata extracted from YouTube
+ * Media metadata — works for YouTube videos, local files, or any future source
  */
-export interface VideoMetadata {
-  videoId: string;
+export interface MediaMetadata {
+  contentId: string;
   title: string;
   description: string;
   duration: number;
   thumbnailUrl: string;
-  channelName: string;
+  source: string; // "YouTube" | "Local File" | channel name
   uploadDate: string;
   url: string;
 }
 
 /**
- * Result from downloading a video
+ * Result from preparing media for the pipeline (download or local file prep)
  */
-export interface DownloadResult {
-  metadata: VideoMetadata;
+export interface PrepareResult {
+  metadata: MediaMetadata;
   audioPath: string;
   videoPath: string;
   cacheDir: string;
@@ -379,14 +379,14 @@ export type ArtifactType =
   | "output/skill";
 
 /**
- * Manifest tracking all artifacts for a processed video
+ * Manifest tracking all artifacts for processed media
  */
 export interface ArtifactManifest {
-  /** YouTube video ID */
-  videoId: string;
-  /** Original YouTube URL */
+  /** Content identifier (YouTube video ID or local file hash) */
+  contentId: string;
+  /** Original URL or file path */
   url: string;
-  /** Video title */
+  /** Media title */
   title: string;
   /** ISO timestamp when processing completed */
   processedAt: string;
@@ -435,9 +435,9 @@ export interface ArtifactManifest {
  * Entry in the global artifact index
  */
 export interface ArtifactIndexEntry {
-  /** Video title */
+  /** Media title */
   title: string;
-  /** Original YouTube URL */
+  /** Original URL or file path */
   url: string;
   /** ISO timestamp when processed */
   processedAt: string;
@@ -446,15 +446,15 @@ export interface ArtifactIndexEntry {
 }
 
 /**
- * Global index of all processed videos
+ * Global index of all processed media
  */
 export interface ArtifactIndex {
   /** Index schema version */
   version: string;
   /** ISO timestamp of last update */
   lastUpdated: string;
-  /** Map of videoId to index entry */
-  videos: Record<string, ArtifactIndexEntry>;
+  /** Map of contentId to index entry */
+  media: Record<string, ArtifactIndexEntry>;
 }
 
 /**
@@ -473,7 +473,7 @@ export interface PlaylistMetadata {
  * Individual entry in a playlist
  */
 export interface PlaylistEntry {
-  videoId: string;
+  contentId: string;
   title: string;
   duration: number;
   position: number;
@@ -491,10 +491,10 @@ export type PlaylistVideoStatusType =
   | "skipped";
 
 /**
- * Status of individual video processing within a playlist
+ * Status of individual media processing within a playlist
  */
 export interface PlaylistVideoStatus {
-  videoId: string;
+  contentId: string;
   title: string;
   status: PlaylistVideoStatusType;
   stage?: string;
