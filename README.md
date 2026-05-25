@@ -2,7 +2,7 @@
 
 ![Scrub Banner](https://www.scrb.dev/og-banner.jpg)
 
-Turn YouTube videos into comprehensive summaries and Agent Skills in seconds. Perfect for quickly reviewing educational content, creating reference documentation, building a personal knowledge base, and generating reusable skills for AI agents.
+Turn YouTube videos and local audio/video files into comprehensive summaries and Agent Skills in seconds. Perfect for quickly reviewing educational content, creating reference documentation, building a personal knowledge base, and generating reusable skills for AI agents.
 
 ## Features
 
@@ -34,6 +34,11 @@ Turn YouTube videos into comprehensive summaries and Agent Skills in seconds. Pe
   - Configurable concurrency for parallel processing
   - Skip existing videos or reprocess as needed
   - Limit number of videos to process
+
+- **Local Media**: Process `.mp3` and `.mp4` files via `scrub file`
+  - Visual analysis skipped automatically for audio-only files
+
+- **Composable CLI**: Run the full pipeline or individual steps (`download`, `prepare`, `transcribe`, `analyze-visuals`, `summarize`)
 
 - **Artifact Caching**: Smart caching system
   - Caches transcriptions, summaries, and visual analysis
@@ -69,11 +74,23 @@ Turn YouTube videos into comprehensive summaries and Agent Skills in seconds. Pe
    sudo apt install ffmpeg
    ```
 
-4. **Anthropic API Key** (for Claude summarization + vision)
+4. **User config** at `~/.scrub/config.json` (Anthropic API key required for summarization and vision)
+
    ```bash
    mkdir -p ~/.scrub
-   # Add your API keys to ~/.scrub/config.json
    ```
+
+   Create `~/.scrub/config.json` with at least:
+
+   ```json
+   {
+     "apis": {
+       "anthropic": "sk-ant-your-key-here"
+     }
+   }
+   ```
+
+   Run `scrub doctor` to verify tools, API keys, and transcription adapters.
 
 ### Optional (for local transcription)
 
@@ -93,6 +110,17 @@ Turn YouTube videos into comprehensive summaries and Agent Skills in seconds. Pe
 
    ```bash
    pip install faster-whisper
+   ```
+
+   Point whisper.cpp at your install in config:
+
+   ```json
+   {
+     "localWhisper": {
+       "binaryPath": "~/whisper.cpp/main",
+       "modelsPath": "~/whisper.cpp/models"
+     }
+   }
    ```
 
 ## Installation
@@ -116,14 +144,16 @@ npm link
 
 ### User Configuration
 
-Scrub reads all persistent configuration from `~/.scrub/config.json`. This file lives outside the repository and can contain local API keys and machine-specific paths.
+Scrub reads all persistent configuration from `~/.scrub/config.json`. This file lives outside the repository and holds API keys, output/cache paths, and adapter settings. Environment variables and repo-local config files are not used.
+
+Default output directory is `~/.scrub/docs`. Artifacts are stored in slugified subdirectories (e.g. `how-to-build-agents/`).
 
 ```json
 {
   "transcription": {
     "priority": [
-      "local-whisper",
       "faster-whisper",
+      "local-whisper",
       "openai",
       "youtube-captions"
     ],
@@ -134,14 +164,17 @@ Scrub reads all persistent configuration from `~/.scrub/config.json`. This file 
     "enabled": true,
     "sceneThreshold": 0.4,
     "maxFrames": 20,
-    "model": "claude-opus-4-5-20251101"
+    "model": "claude-opus-4-6"
+  },
+  "summarizer": {
+    "model": "claude-opus-4-6"
   },
   "output": {
-    "directory": "./output",
+    "directory": "~/.scrub/docs",
     "includeFullTranscript": false
   },
   "cache": {
-    "directory": "./cache"
+    "directory": ".cache"
   },
   "localWhisper": {
     "binaryPath": "/path/to/whisper.cpp/main",
@@ -155,79 +188,94 @@ Scrub reads all persistent configuration from `~/.scrub/config.json`. This file 
 }
 ```
 
+Paths may use `~` for your home directory. Override output per run with `-o, --output-dir` on `scrub youtube` and `scrub file`.
+
 ## Usage
 
-### Basic Usage
+### Full pipeline (orchestrators)
 
 ```bash
-# Process a YouTube video
-scrub https://www.youtube.com/watch?v=VIDEO_ID
+# YouTube video or playlist
+scrub youtube https://www.youtube.com/watch?v=VIDEO_ID
 
-# Or use npm run
-npm run dev -- https://www.youtube.com/watch?v=VIDEO_ID
+# Local .mp3 or .mp4
+scrub file ./recording.mp4
+
+# Development (from repo)
+npm run dev -- youtube https://www.youtube.com/watch?v=VIDEO_ID
 ```
 
-### Options
+**`scrub youtube <url>` options:**
 
-```bash
-scrub <url> [options]
+| Flag | Description |
+|------|-------------|
+| `-o, --output-dir <path>` | Override artifact/output directory |
+| `-t, --transcriber <name>` | Force adapter (`local-whisper`, `faster-whisper`, `openai`, `deepgram`, `youtube-captions`) |
+| `--no-visuals` | Skip visual analysis |
+| `--scene-threshold <n>` | Scene detection sensitivity (default: 0.4) |
+| `--max-frames <n>` | Max frames to analyze (default: 20) |
+| `--skill` | Generate `SKILL.md` alongside markdown output |
+| `--skill-name <name>` | Custom skill name |
+| `-v, --verbose` | Detailed progress |
+| `--max-videos <n>` | Limit playlist videos processed |
+| `--parallel <n>` | Concurrent playlist jobs (default: 1) |
+| `--no-skip-existing` | Reprocess cached videos |
 
-Options:
-  -o, --output <path>          Output file path (default: ./output/{title}.md)
-  -t, --transcriber <name>     Force specific transcriber
-  --no-visuals                 Skip visual analysis (faster, cheaper)
-  --scene-threshold <n>        Scene detection sensitivity (default: 0.4)
-  --max-frames <n>             Maximum frames to analyze (default: 20)
-  --output-skill               Generate SKILL.md from video content
-  --skill-name <name>          Custom skill name (auto-derived if not provided)
-  -v, --verbose                Show detailed progress
-  --dry-run                    Check prerequisites without processing
-  --max-videos <number>        Maximum videos to process from playlist
-  --parallel <number>          Process N videos in parallel (default: 1)
-  --no-skip-existing           Reprocess videos that already exist
-  -h, --help                   Display help
-```
+**`scrub file <path>`** supports the same flags except playlist options. Visual analysis is skipped for `.mp3`.
 
 ### Examples
 
 ```bash
-# Basic processing
-scrub https://www.youtube.com/watch?v=dQw4w9WgXcQ
+# YouTube video
+scrub youtube https://www.youtube.com/watch?v=dQw4w9WgXcQ
 
-# Save to specific file
-scrub https://youtu.be/abc123 -o ./notes/react-hooks.md
+# Custom output directory
+scrub youtube https://youtu.be/abc123 -o ./notes
 
 # Skip visual analysis (faster, cheaper)
-scrub https://youtube.com/watch?v=xyz --no-visuals
+scrub youtube https://youtube.com/watch?v=xyz --no-visuals
 
 # Force OpenAI transcription
-scrub https://youtube.com/watch?v=xyz -t openai
+scrub youtube https://youtube.com/watch?v=xyz -t openai
 
-# Verbose output
-scrub https://youtube.com/watch?v=xyz -v
+# Generate an Agent Skill
+scrub youtube https://youtube.com/watch?v=xyz --skill --skill-name react-hooks
 
-# Generate an Agent Skill from video
-scrub https://youtube.com/watch?v=xyz --output-skill
+# Playlist: first 5 videos, 2 in parallel
+scrub youtube https://youtube.com/playlist?list=PLxyz --max-videos 5 --parallel 2
 
-# Generate skill with custom name
-scrub https://youtube.com/watch?v=xyz --output-skill --skill-name "react-hooks"
+# Reprocess cached playlist entries
+scrub youtube https://youtube.com/playlist?list=PLxyz --no-skip-existing
 
-# Process a playlist (first 5 videos, 2 in parallel)
-scrub https://youtube.com/playlist?list=PLxyz --max-videos 5 --parallel 2
-
-# Reprocess existing videos in a playlist
-scrub https://youtube.com/playlist?list=PLxyz --no-skip-existing
+# Local file
+scrub file ./podcast.mp3 --skill
 ```
 
-### Diagnostic Commands
+### Primitives (pipeline steps)
+
+Run individual steps for scripting or debugging:
 
 ```bash
-# Check system prerequisites
+scrub download <youtube-url> [-o ./download] [--no-video]
+scrub prepare <local.mp3|mp4> [-o ./prepare] [--no-video]
+scrub transcribe <audio.wav> [-o ./transcript.json] [-t openai] [--text]
+scrub analyze-visuals <video.mp4> [-o ./visual_analysis.json]
+scrub summarize <file> [-o ./summary.json] [--markdown] [--skill] [--metadata path] [--visuals path]
+```
+
+`summarize` accepts `.json` transcripts, plain `.txt`, `.md`, and other text sources.
+
+### Diagnostic commands
+
+```bash
+# Check tools, config path, API keys (pings Anthropic when configured), adapters
 scrub doctor
 
-# List available transcription adapters
+# List transcription adapters and availability
 scrub transcribers
 ```
+
+`scrub doctor` exits with code 1 when requirements are missing.
 
 ## Output Format
 
@@ -317,13 +365,14 @@ Adapters are tried in priority order. Set your preference in `~/.scrub/config.js
 ## Troubleshooting
 
 ### "yt-dlp not found"
+
 ```bash
 # macOS
 brew install yt-dlp
 
 # Or with pip
 pip install yt-dlp
-````
+```
 
 ### "ffmpeg not found"
 
@@ -363,57 +412,40 @@ mkdir -p ~/.scrub
 
 ```
 src/
-  entrypoints/           # Driving adapters (how users access the app)
-    cli/                 # Command-line interface (Commander.js + Ink)
+  entrypoints/cli/       # Commander.js + Ink (orchestrators + primitives)
 
-  core/                  # Domain orchestration
-    VideoProcessor.ts    # Main processing pipeline for single videos
-    PlaylistProcessor.ts # Orchestrates playlist processing with parallelism
+  orchestrators/         # End-to-end pipelines
+    youtube.ts           # YouTube video / playlist processing
+    file.ts              # Local .mp3 / .mp4 processing
 
-  services/              # Domain services (business logic)
-    Summarizer.ts        # Claude-powered content summarization
-    VisualAnalyzer.ts    # Frame analysis with Claude Vision
-    SceneDetector.ts     # FFmpeg-based scene change detection
-    MarkdownGenerator.ts # Output formatting
-    SkillGenerator.ts    # Agent Skill generation from video content
-    VideoDownloader.ts   # yt-dlp wrapper for video acquisition
-    ArtifactStore.ts     # Persistent artifact storage and caching
-    PlaylistExtractor.ts # YouTube playlist metadata extraction
+  core/                  # Pure pipeline primitives
+    download.ts          # yt-dlp download + metadata
+    prepare.ts           # Local file audio extraction + metadata
+    transcribe.ts        # Transcription entrypoint
+    analyze-visuals.ts   # Scene detection + Claude Vision
+    summarize.ts         # Summarization, markdown, and skill generation
 
-  transcription/         # Speech-to-text system
-    ITranscriber.ts      # Interface for all transcribers
-    TranscriberFactory.ts # Factory with priority ordering and fallback
-    adapters/            # Individual adapter implementations
-      LocalWhisperAdapter.ts
-      FasterWhisperAdapter.ts
-      OpenAIWhisperAdapter.ts
-      DeepgramAdapter.ts
-      YouTubeCaptionsAdapter.ts
+  services/              # Shared domain services
+    ArtifactStore.ts     # Slug-based artifact layout and caching
+    PlaylistExtractor.ts # Playlist metadata
 
-  infrastructure/        # Cross-cutting concerns
-    Config.ts            # Configuration management (env vars + config files)
-
-  utils/                 # Shared utilities
-    logger.ts            # Logging utilities
-    helpers.ts           # Helper functions
-
-  types/                 # TypeScript type definitions
-    index.ts             # Comprehensive type definitions
+  transcription/         # Speech-to-text adapters + factory fallback
+  infrastructure/        # ~/.scrub/config.json loading (Config.ts)
+  utils/                 # Logging, ffmpeg helpers
+  types/                 # Shared TypeScript types
 ```
 
-The architecture follows **Hexagonal (Ports & Adapters)** patterns:
+Architecture is a **three-layer** layout:
 
-- **Entrypoints** handle protocol-specific concerns (CLI args)
-- **Core** contains protocol-agnostic business logic
-- **Services** implement domain logic (summarization, visual analysis, etc.)
-- **Transcription** isolates speech-to-text behind a factory pattern
-- **Infrastructure** handles cross-cutting concerns like configuration
+- **Entrypoints** — CLI parsing, progress UI, and wiring flags into config
+- **Orchestrators** — compose primitives into full YouTube or local-file runs
+- **Core** — stateless functions callable from CLI primitives or orchestrators
 
 ## Development
 
 ```bash
 # Run in development mode
-npm run dev -- https://youtube.com/watch?v=xyz
+npm run dev -- youtube https://youtube.com/watch?v=xyz
 
 # Type checking
 npm run typecheck
