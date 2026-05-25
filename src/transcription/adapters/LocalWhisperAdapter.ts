@@ -1,6 +1,7 @@
 import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { join } from "path";
+import { homedir } from "os";
 import { config } from "../../infrastructure/Config.js";
 import { logger } from "../../utils/logger.js";
 import { commandExists, runCommand, ensureDir } from "../../utils/helpers.js";
@@ -15,7 +16,7 @@ import type {
  * Adapter for local Whisper transcription using whisper.cpp
  *
  * Requires whisper.cpp to be installed and available in PATH as 'whisper'
- * or via the WHISPER_CPP_PATH environment variable.
+ * or via localWhisper.binaryPath in ~/.scrub/config.json.
  */
 export class LocalWhisperAdapter implements ITranscriber {
   readonly name = "Local Whisper (whisper.cpp)";
@@ -27,10 +28,13 @@ export class LocalWhisperAdapter implements ITranscriber {
    * Check if whisper.cpp is available
    */
   async isAvailable(): Promise<boolean> {
-    // Check environment variable first
-    if (process.env.WHISPER_CPP_PATH) {
-      if (existsSync(process.env.WHISPER_CPP_PATH)) {
-        this.whisperPath = process.env.WHISPER_CPP_PATH;
+    const localWhisperConfig = config.getLocalWhisper();
+
+    // Check configured binary path first
+    if (localWhisperConfig.binaryPath) {
+      const binaryPath = config.resolvePath(localWhisperConfig.binaryPath);
+      if (existsSync(binaryPath)) {
+        this.whisperPath = binaryPath;
         return true;
       }
     }
@@ -48,8 +52,8 @@ export class LocalWhisperAdapter implements ITranscriber {
     const commonPaths = [
       "/usr/local/bin/whisper",
       "/opt/homebrew/bin/whisper",
-      join(process.env.HOME || "", "whisper.cpp/main"),
-      join(process.env.HOME || "", ".local/bin/whisper"),
+      join(homedir(), "whisper.cpp/main"),
+      join(homedir(), ".local/bin/whisper"),
     ];
 
     for (const path of commonPaths) {
@@ -140,14 +144,19 @@ export class LocalWhisperAdapter implements ITranscriber {
    */
   private async getModelPath(model: string): Promise<string | null> {
     const modelFileName = `ggml-${model}.bin`;
+    const localWhisperConfig = config.getLocalWhisper();
 
     // Check common model locations
+    const configuredModelsPath = localWhisperConfig.modelsPath
+      ? config.resolvePath(localWhisperConfig.modelsPath)
+      : undefined;
+
     const searchPaths = [
-      // Environment variable
-      process.env.WHISPER_MODELS_PATH,
+      // Configured model directory
+      configuredModelsPath,
       // Common whisper.cpp paths
-      join(process.env.HOME || "", "whisper.cpp/models"),
-      join(process.env.HOME || "", ".cache/whisper"),
+      join(homedir(), "whisper.cpp/models"),
+      join(homedir(), ".cache/whisper"),
       "/usr/local/share/whisper/models",
       "./models",
     ].filter(Boolean) as string[];

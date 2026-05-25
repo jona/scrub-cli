@@ -12,7 +12,7 @@ import type {
 /**
  * Adapter for OpenAI Whisper API
  *
- * Requires OPENAI_API_KEY environment variable
+ * Requires apis.openai in ~/.scrub/config.json
  * Pricing: ~$0.006 per minute of audio
  */
 export class OpenAIWhisperAdapter implements ITranscriber {
@@ -49,7 +49,7 @@ export class OpenAIWhisperAdapter implements ITranscriber {
       const available = await this.isAvailable();
       if (!available) {
         throw new Error(
-          "OpenAI API key not configured. Set OPENAI_API_KEY environment variable."
+          "OpenAI API key not configured. Add apis.openai to ~/.scrub/config.json."
         );
       }
     }

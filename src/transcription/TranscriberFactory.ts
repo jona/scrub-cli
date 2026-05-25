@@ -151,7 +151,7 @@ export class TranscriberFactory {
       `All transcription adapters failed:\n  ${errorSummary}\n\n` +
         "Suggestions:\n" +
         "  - Install whisper.cpp for local transcription\n" +
-        "  - Set OPENAI_API_KEY for OpenAI Whisper API\n" +
+        "  - Add apis.openai to ~/.scrub/config.json for OpenAI Whisper API\n" +
         "  - Ensure the video has captions for fallback"
     );
   }

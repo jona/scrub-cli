@@ -112,9 +112,12 @@ export function generateContentId(filePath: string): string {
  */
 export async function getMediaDuration(filePath: string): Promise<number> {
   const result = await runCommand("ffprobe", [
-    "-v", "error",
-    "-show_entries", "format=duration",
-    "-of", "default=noprint_wrappers=1:nokey=1",
+    "-v",
+    "error",
+    "-show_entries",
+    "format=duration",
+    "-of",
+    "default=noprint_wrappers=1:nokey=1",
     filePath,
   ]);
 
@@ -133,11 +136,15 @@ export async function extractAudioToWav(
   outputPath: string
 ): Promise<void> {
   const args = [
-    "-i", inputPath,
+    "-i",
+    inputPath,
     "-vn", // No video
-    "-acodec", "pcm_s16le",
-    "-ar", "16000",
-    "-ac", "1",
+    "-acodec",
+    "pcm_s16le",
+    "-ar",
+    "16000",
+    "-ac",
+    "1",
     "-y", // Overwrite
     outputPath,
   ];

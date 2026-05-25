@@ -57,13 +57,19 @@ export async function download(
     throw new Error(`Invalid YouTube URL: ${url}`);
   }
 
-  const { outputDir, skipVideo, maxResolution = 720, metadata: preMetadata, onProgress } = options;
+  const {
+    outputDir,
+    skipVideo,
+    maxResolution = 720,
+    metadata: preMetadata,
+    onProgress,
+  } = options;
   const audioPath = `${outputDir}/audio.wav`;
   const videoPath = `${outputDir}/video.mp4`;
 
   // Fetch metadata (skip if pre-fetched)
   onProgress?.("Fetching video metadata...");
-  const metadata = preMetadata ?? await fetchYouTubeMetadata(url);
+  const metadata = preMetadata ?? (await fetchYouTubeMetadata(url));
 
   // Download audio
   onProgress?.("Downloading audio...");
@@ -73,7 +79,12 @@ export async function download(
   let finalVideoPath = "";
   if (!skipVideo) {
     onProgress?.("Downloading video...");
-    finalVideoPath = await downloadVideo(url, videoPath, maxResolution, onProgress);
+    finalVideoPath = await downloadVideo(
+      url,
+      videoPath,
+      maxResolution,
+      onProgress
+    );
   }
 
   return {
@@ -87,7 +98,9 @@ export async function download(
 /**
  * Fetch video metadata using yt-dlp
  */
-export async function fetchYouTubeMetadata(url: string): Promise<MediaMetadata> {
+export async function fetchYouTubeMetadata(
+  url: string
+): Promise<MediaMetadata> {
   const { stdout } = await execAsync(
     `yt-dlp --dump-json --no-download "${url}"`,
     { maxBuffer: 10 * 1024 * 1024 }
@@ -128,9 +141,12 @@ async function downloadAudio(
 ): Promise<void> {
   const args = [
     "-x",
-    "--audio-format", "wav",
-    "--audio-quality", "0",
-    "-o", outputPath,
+    "--audio-format",
+    "wav",
+    "--audio-quality",
+    "0",
+    "-o",
+    outputPath,
     "--no-playlist",
     "--no-warnings",
     url,
@@ -157,8 +173,10 @@ async function downloadVideo(
   onProgress?: (message: string) => void
 ): Promise<string> {
   const args = [
-    "-f", `best[height<=${maxHeight}]/best`,
-    "-o", outputPath,
+    "-f",
+    `best[height<=${maxHeight}]/best`,
+    "-o",
+    outputPath,
     "--no-playlist",
     "--no-warnings",
     url,

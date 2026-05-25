@@ -10,7 +10,12 @@ import { existsSync, mkdirSync, readFileSync, statSync } from "fs";
 import { join, basename } from "path";
 import { config } from "../infrastructure/Config.js";
 import { logger } from "../utils/logger.js";
-import { commandExists, runCommand, chunk, formatTimestamp } from "../utils/helpers.js";
+import {
+  commandExists,
+  runCommand,
+  chunk,
+  formatTimestamp,
+} from "../utils/helpers.js";
 import type { SceneFrame, VisualAnalysis, VisualType } from "../types/index.js";
 
 export interface AnalyzeVisualsOptions {
@@ -34,7 +39,9 @@ export async function analyzeVisuals(
   options: AnalyzeVisualsOptions
 ): Promise<VisualAnalysis[]> {
   if (!(await commandExists("ffmpeg"))) {
-    throw new Error("ffmpeg is not installed. Install with: brew install ffmpeg");
+    throw new Error(
+      "ffmpeg is not installed. Install with: brew install ffmpeg"
+    );
   }
 
   if (!existsSync(videoPath)) {
@@ -42,7 +49,9 @@ export async function analyzeVisuals(
   }
 
   if (!config.hasAnthropicKey()) {
-    throw new Error("Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable.");
+    throw new Error(
+      "Anthropic API key not configured. Add apis.anthropic to ~/.scrub/config.json."
+    );
   }
 
   const visualConfig = config.getVisual();
@@ -94,12 +103,21 @@ async function detectAndExtractFrames(
   logger.debug(`Video duration: ${duration}s`);
 
   // Run scene detection
-  let timestamps = await detectSceneTimestamps(videoPath, threshold, maxFrames, minInterval);
+  let timestamps = await detectSceneTimestamps(
+    videoPath,
+    threshold,
+    maxFrames,
+    minInterval
+  );
   logger.debug(`Detected ${timestamps.length} scene changes`);
 
   // Add periodic frames if too few scenes detected
   if (timestamps.length < 3 && duration > 30) {
-    const periodicFrames = generatePeriodicTimestamps(duration, maxFrames, minInterval);
+    const periodicFrames = generatePeriodicTimestamps(
+      duration,
+      maxFrames,
+      minInterval
+    );
     for (const ts of periodicFrames) {
       if (!timestamps.some((s) => Math.abs(s - ts) < minInterval)) {
         timestamps.push(ts);
@@ -123,10 +141,14 @@ async function detectAndExtractFrames(
     onProgress?.(`Extracting frame ${i + 1}/${finalTimestamps.length}...`);
 
     const result = await runCommand("ffmpeg", [
-      "-ss", timestamp.toFixed(3),
-      "-i", videoPath,
-      "-vframes", "1",
-      "-q:v", "2",
+      "-ss",
+      timestamp.toFixed(3),
+      "-i",
+      videoPath,
+      "-vframes",
+      "1",
+      "-q:v",
+      "2",
       "-y",
       framePath,
     ]);
@@ -143,9 +165,12 @@ async function detectAndExtractFrames(
 
 async function getVideoDuration(videoPath: string): Promise<number> {
   const result = await runCommand("ffprobe", [
-    "-v", "error",
-    "-show_entries", "format=duration",
-    "-of", "default=noprint_wrappers=1:nokey=1",
+    "-v",
+    "error",
+    "-show_entries",
+    "format=duration",
+    "-of",
+    "default=noprint_wrappers=1:nokey=1",
     videoPath,
   ]);
 
@@ -163,9 +188,12 @@ async function detectSceneTimestamps(
   minInterval: number
 ): Promise<number[]> {
   const result = await runCommand("ffmpeg", [
-    "-i", videoPath,
-    "-filter:v", `select='gt(scene,${threshold})',showinfo`,
-    "-f", "null",
+    "-i",
+    videoPath,
+    "-filter:v",
+    `select='gt(scene,${threshold})',showinfo`,
+    "-f",
+    "null",
     "-",
   ]);
 
@@ -311,7 +339,10 @@ function loadImageAsBase64(imagePath: string): {
     const data = buffer.toString("base64");
 
     const ext = imagePath.toLowerCase().split(".").pop();
-    const mediaTypes: Record<string, "image/png" | "image/jpeg" | "image/gif" | "image/webp"> = {
+    const mediaTypes: Record<
+      string,
+      "image/png" | "image/jpeg" | "image/gif" | "image/webp"
+    > = {
       png: "image/png",
       jpg: "image/jpeg",
       jpeg: "image/jpeg",
@@ -321,7 +352,9 @@ function loadImageAsBase64(imagePath: string): {
 
     return { data, mediaType: mediaTypes[ext || "png"] || "image/png" };
   } catch (error) {
-    logger.warn(`Failed to load image ${imagePath}: ${(error as Error).message}`);
+    logger.warn(
+      `Failed to load image ${imagePath}: ${(error as Error).message}`
+    );
     return null;
   }
 }
@@ -356,24 +389,50 @@ function parseAnalysisResponse(
       };
     });
   } catch (error) {
-    logger.warn(`Failed to parse analysis response: ${(error as Error).message}`);
+    logger.warn(
+      `Failed to parse analysis response: ${(error as Error).message}`
+    );
     return createFallbackAnalysis(frames);
   }
 }
 
 function normalizeVisualType(type: string): VisualType {
   const normalized = type?.toLowerCase().trim();
-  const validTypes: VisualType[] = ["slide", "code", "diagram", "terminal", "talking-head", "other"];
+  const validTypes: VisualType[] = [
+    "slide",
+    "code",
+    "diagram",
+    "terminal",
+    "talking-head",
+    "other",
+  ];
 
   if (validTypes.includes(normalized as VisualType)) {
     return normalized as VisualType;
   }
 
-  if (normalized?.includes("code") || normalized?.includes("programming")) return "code";
-  if (normalized?.includes("slide") || normalized?.includes("presentation")) return "slide";
-  if (normalized?.includes("diagram") || normalized?.includes("chart") || normalized?.includes("graph")) return "diagram";
-  if (normalized?.includes("terminal") || normalized?.includes("console") || normalized?.includes("shell")) return "terminal";
-  if (normalized?.includes("person") || normalized?.includes("speaker") || normalized?.includes("face")) return "talking-head";
+  if (normalized?.includes("code") || normalized?.includes("programming"))
+    return "code";
+  if (normalized?.includes("slide") || normalized?.includes("presentation"))
+    return "slide";
+  if (
+    normalized?.includes("diagram") ||
+    normalized?.includes("chart") ||
+    normalized?.includes("graph")
+  )
+    return "diagram";
+  if (
+    normalized?.includes("terminal") ||
+    normalized?.includes("console") ||
+    normalized?.includes("shell")
+  )
+    return "terminal";
+  if (
+    normalized?.includes("person") ||
+    normalized?.includes("speaker") ||
+    normalized?.includes("face")
+  )
+    return "talking-head";
 
   return "other";
 }

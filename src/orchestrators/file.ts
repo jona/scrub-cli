@@ -8,7 +8,11 @@
 import { basename, extname } from "path";
 import { config } from "../infrastructure/Config.js";
 import { logger } from "../utils/logger.js";
-import { prepare, generateContentId, getLocalFileType } from "../core/prepare.js";
+import {
+  prepare,
+  generateContentId,
+  getLocalFileType,
+} from "../core/prepare.js";
 import { transcribe } from "../core/transcribe.js";
 import { analyzeVisuals } from "../core/analyze-visuals.js";
 import { summarize } from "../core/summarize.js";
@@ -27,7 +31,11 @@ export interface FileProcessOptions {
   generateSkill?: boolean;
   skillName?: string;
   verbose?: boolean;
-  onProgress?: (progress: { stage: string; progress: number; message: string }) => void;
+  onProgress?: (progress: {
+    stage: string;
+    progress: number;
+    message: string;
+  }) => void;
 }
 
 /**
@@ -63,7 +71,12 @@ export async function processFile(
   const contentId = generateContentId(filePath);
   const title = basename(filePath, extname(filePath));
 
-  const progress = (stage: string, step: number, total: number, message: string) => {
+  const progress = (
+    stage: string,
+    step: number,
+    total: number,
+    message: string
+  ) => {
     options.onProgress?.({ stage, progress: (step / total) * 100, message });
   };
 
@@ -129,9 +142,18 @@ export async function processFile(
     progress("summarize", 4, 5, "Generating summary...");
     const summarizeStart = Date.now();
 
-    const transcriptPath = artifactStore.getArtifactPath(contentId, "transcription/json");
-    const metadataPath = artifactStore.getArtifactPath(contentId, "source/metadata");
-    const visualsPath = artifactStore.getArtifactPath(contentId, "inference/visual_analysis");
+    const transcriptPath = artifactStore.getArtifactPath(
+      contentId,
+      "transcription/json"
+    );
+    const metadataPath = artifactStore.getArtifactPath(
+      contentId,
+      "source/metadata"
+    );
+    const visualsPath = artifactStore.getArtifactPath(
+      contentId,
+      "inference/visual_analysis"
+    );
 
     const summarizeResult = await summarize(transcriptPath, {
       metadataPath,
@@ -147,12 +169,21 @@ export async function processFile(
 
     // Save artifacts
     artifactStore.saveSummary(contentId, summarizeResult.summary);
-    const outputPath = artifactStore.saveMarkdown(contentId, summarizeResult.markdown!);
+    const outputPath = artifactStore.saveMarkdown(
+      contentId,
+      summarizeResult.markdown!
+    );
 
     let skillPath: string | undefined;
     if (summarizeResult.skill) {
-      skillPath = artifactStore.saveSkill(contentId, summarizeResult.skill.skillMd);
-      artifactStore.saveSkillChecklist(contentId, summarizeResult.skill.checklist);
+      skillPath = artifactStore.saveSkill(
+        contentId,
+        summarizeResult.skill.skillMd
+      );
+      artifactStore.saveSkillChecklist(
+        contentId,
+        summarizeResult.skill.checklist
+      );
     }
 
     stats.totalTime = Date.now() - startTime;
@@ -198,15 +229,21 @@ export async function checkFilePrerequisites(): Promise<{
     missing.push("ffmpeg (required for audio extraction)");
   }
   if (!config.hasAnthropicKey()) {
-    missing.push("ANTHROPIC_API_KEY (required for summarization)");
+    missing.push(
+      "Anthropic API key in ~/.scrub/config.json (required for summarization)"
+    );
   }
 
   const transcribers = await getTranscriberDiagnostics();
   const available = transcribers.filter((t) => t.available);
   // Filter out youtube-captions since it won't work for local files
-  const localAvailable = available.filter((t) => t.source !== "youtube-captions");
+  const localAvailable = available.filter(
+    (t) => t.source !== "youtube-captions"
+  );
   if (localAvailable.length === 0) {
-    warnings.push("No local transcription adapters available (youtube-captions cannot be used for local files).");
+    warnings.push(
+      "No local transcription adapters available (youtube-captions cannot be used for local files)."
+    );
   }
 
   return { ready: missing.length === 0, missing, warnings };

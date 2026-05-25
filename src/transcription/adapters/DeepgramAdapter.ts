@@ -12,7 +12,7 @@ import type {
 /**
  * Adapter for Deepgram Speech-to-Text API
  *
- * Requires DEEPGRAM_API_KEY environment variable
+ * Requires apis.deepgram in ~/.scrub/config.json
  * Known for excellent accuracy and fast processing
  */
 export class DeepgramAdapter implements ITranscriber {
@@ -46,7 +46,7 @@ export class DeepgramAdapter implements ITranscriber {
       const available = await this.isAvailable();
       if (!available) {
         throw new Error(
-          "Deepgram API key not configured. Set DEEPGRAM_API_KEY environment variable."
+          "Deepgram API key not configured. Add apis.deepgram to ~/.scrub/config.json."
         );
       }
     }

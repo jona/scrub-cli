@@ -69,9 +69,7 @@ export class ArtifactStore {
     if (!existsSync(indexPath)) return;
 
     try {
-      const index: ArtifactIndex = JSON.parse(
-        readFileSync(indexPath, "utf-8")
-      );
+      const index: ArtifactIndex = JSON.parse(readFileSync(indexPath, "utf-8"));
       const entries = index.media ?? (index as any).videos ?? {};
       for (const [contentId, entry] of Object.entries(entries)) {
         this.dirMap.set(contentId, (entry as ArtifactIndexEntry).outputPath);
@@ -422,7 +420,9 @@ export class ArtifactStore {
         },
         frames: {
           count: framePaths.length,
-          paths: framePaths.map((p) => relative(this.getVideoDir(contentId), p)),
+          paths: framePaths.map((p) =>
+            relative(this.getVideoDir(contentId), p)
+          ),
         },
         transcription: {
           source: transcriptionSource,

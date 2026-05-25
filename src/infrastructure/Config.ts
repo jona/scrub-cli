@@ -2,10 +2,9 @@ import { z } from "zod";
 import { readFileSync, existsSync } from "fs";
 import { resolve, join } from "path";
 import { homedir } from "os";
-import dotenv from "dotenv";
 
-// Load environment variables
-dotenv.config();
+const CONFIG_DIR = join(homedir(), ".scrub");
+const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 
 /**
  * Schema for transcription configuration
@@ -54,6 +53,21 @@ const OutputConfigSchema = z.object({
 });
 
 /**
+ * Schema for cache configuration
+ */
+const CacheConfigSchema = z.object({
+  directory: z.string().default(".cache"),
+});
+
+/**
+ * Schema for local Whisper configuration
+ */
+const LocalWhisperConfigSchema = z.object({
+  binaryPath: z.string().optional(),
+  modelsPath: z.string().optional(),
+});
+
+/**
  * Schema for API keys configuration
  */
 const ApiKeysSchema = z.object({
@@ -70,6 +84,8 @@ const ConfigSchema = z.object({
   visual: VisualConfigSchema.default({}),
   summarizer: SummarizerConfigSchema.default({}),
   output: OutputConfigSchema.default({}),
+  cache: CacheConfigSchema.default({}),
+  localWhisper: LocalWhisperConfigSchema.default({}),
   apis: ApiKeysSchema.default({}),
 });
 
@@ -78,6 +94,8 @@ export type TranscriptionConfig = z.infer<typeof TranscriptionConfigSchema>;
 export type VisualConfig = z.infer<typeof VisualConfigSchema>;
 export type SummarizerConfig = z.infer<typeof SummarizerConfigSchema>;
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
+export type CacheConfig = z.infer<typeof CacheConfigSchema>;
+export type LocalWhisperConfig = z.infer<typeof LocalWhisperConfigSchema>;
 
 /**
  * Default configuration values
@@ -101,6 +119,10 @@ const DEFAULT_CONFIG: Config = {
     directory: "~/.scrub/docs",
     includeFullTranscript: false,
   },
+  cache: {
+    directory: ".cache",
+  },
+  localWhisper: {},
   apis: {},
 };
 
@@ -116,50 +138,23 @@ class ConfigManager {
   }
 
   /**
-   * Load configuration from file and environment
+   * Load configuration from ~/.scrub/config.json
    */
   private loadConfig(): Config {
     let fileConfig: Partial<Config> = {};
 
-    // Try to load from scrub.config.json
-    const configPaths = [
-      resolve(process.cwd(), "scrub.config.json"),
-      resolve(process.cwd(), ".scrubrc.json"),
-    ];
-
-    for (const configPath of configPaths) {
-      if (existsSync(configPath)) {
-        try {
-          const raw = readFileSync(configPath, "utf-8");
-          fileConfig = JSON.parse(raw);
-          this.configPath = configPath;
-          break;
-        } catch {
-          // Invalid JSON, continue
-        }
+    if (existsSync(CONFIG_FILE)) {
+      try {
+        const raw = readFileSync(CONFIG_FILE, "utf-8");
+        fileConfig = JSON.parse(raw);
+        this.configPath = CONFIG_FILE;
+      } catch {
+        // Invalid JSON, fall back to defaults.
       }
     }
 
-    // Merge with environment variables for API keys
-    const envConfig: Partial<Config> = {
-      apis: {
-        anthropic: process.env.ANTHROPIC_API_KEY,
-        openai: process.env.OPENAI_API_KEY,
-        deepgram: process.env.DEEPGRAM_API_KEY,
-      },
-    };
-
-    // Override output directory from env if set
-    if (process.env.SCRUB_OUTPUT_DIR) {
-      envConfig.output = {
-        directory: process.env.SCRUB_OUTPUT_DIR,
-        includeFullTranscript:
-          fileConfig.output?.includeFullTranscript ?? false,
-      };
-    }
-
-    // Deep merge: defaults < file config < env config
-    const merged = this.deepMerge(DEFAULT_CONFIG, fileConfig, envConfig);
+    // Deep merge: defaults < user config
+    const merged = this.deepMerge(DEFAULT_CONFIG, fileConfig);
 
     // Validate and return
     return ConfigSchema.parse(merged);
@@ -229,6 +224,20 @@ class ConfigManager {
   }
 
   /**
+   * Get cache configuration
+   */
+  getCache(): CacheConfig {
+    return this.config.cache;
+  }
+
+  /**
+   * Get local Whisper configuration
+   */
+  getLocalWhisper(): LocalWhisperConfig {
+    return this.config.localWhisper;
+  }
+
+  /**
    * Get API key for a service
    */
   getApiKey(service: "anthropic" | "openai" | "deepgram"): string | undefined {
@@ -250,6 +259,13 @@ class ConfigManager {
   }
 
   /**
+   * Get the expected user config path
+   */
+  getDefaultConfigPath(): string {
+    return CONFIG_FILE;
+  }
+
+  /**
    * Override the output directory at runtime (e.g. from CLI flags)
    */
   setOutputDir(directory: string): void {
@@ -263,7 +279,7 @@ class ConfigManager {
    * Get cache directory path
    */
   getCacheDir(): string {
-    return process.env.SCRUB_CACHE_DIR || resolve(process.cwd(), ".cache");
+    return this.resolvePath(this.config.cache.directory);
   }
 
   /**
@@ -276,7 +292,7 @@ class ConfigManager {
   /**
    * Resolve a path, expanding ~ to the user's home directory
    */
-  private resolvePath(p: string): string {
+  resolvePath(p: string): string {
     if (p.startsWith("~/") || p === "~") {
       return join(homedir(), p.slice(2));
     }

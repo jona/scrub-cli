@@ -81,7 +81,9 @@ function Header() {
       <Text bold color="cyan">
         {"  "}Scrub
       </Text>
-      <Text dimColor>{"  "}Turn audio & video into knowledge bases for AI agents</Text>
+      <Text dimColor>
+        {"  "}Turn audio & video into knowledge bases for AI agents
+      </Text>
     </Box>
   );
 }
