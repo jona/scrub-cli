@@ -34,7 +34,7 @@ program
   .description(
     "Turn audio and video content into comprehensive knowledge bases for AI agents"
   )
-  .version("0.2.0");
+  .version("0.2.1");
 
 // ── Orchestrators ──────────────────────────────────────────────────
 

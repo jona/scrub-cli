@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-05-25
+
+### Changed
+
+- **Configuration** now loads exclusively from `~/.scrub/config.json` (API keys, output/cache paths, local Whisper binary and model paths)
+- `scrub doctor` pings the Anthropic API when a key is configured and exits non-zero when requirements are missing
+- Summary and skill generation use the Anthropic streaming API to avoid timeouts on large responses
+- Generated `SKILL.md` is written beside the output markdown file instead of the current working directory
+
+### Removed
+
+- `dotenv` dependency and `.env.example` — use `apis.*` and path settings in `~/.scrub/config.json` instead of environment variables
+- Repo-local `scrub.config.json` / `.scrubrc.json` discovery — user config lives only under `~/.scrub/`
+
 ## [0.2.0] - 2026-03-30
 
 ### Changed
