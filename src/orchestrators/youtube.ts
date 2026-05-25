@@ -8,7 +8,12 @@
 import { config } from "../infrastructure/Config.js";
 import { logger } from "../utils/logger.js";
 import { extractVideoId } from "../utils/helpers.js";
-import { download, fetchYouTubeMetadata, isYtDlpAvailable, isFfmpegAvailable } from "../core/download.js";
+import {
+  download,
+  fetchYouTubeMetadata,
+  isYtDlpAvailable,
+  isFfmpegAvailable,
+} from "../core/download.js";
 import { transcribe, getTranscriberDiagnostics } from "../core/transcribe.js";
 import { analyzeVisuals } from "../core/analyze-visuals.js";
 import { summarize } from "../core/summarize.js";
@@ -25,7 +30,10 @@ import type {
   PlaylistProcessResult,
   MediaMetadata,
 } from "../types/index.js";
-import type { TranscriptionResult, TranscriptionSource } from "../transcription/ITranscriber.js";
+import type {
+  TranscriptionResult,
+  TranscriptionSource,
+} from "../transcription/ITranscriber.js";
 
 export interface YouTubeProcessOptions {
   skipVisuals?: boolean;
@@ -36,7 +44,11 @@ export interface YouTubeProcessOptions {
   skillName?: string;
   verbose?: boolean;
   sourcePlaylist?: SourcePlaylist;
-  onProgress?: (progress: { stage: string; progress: number; message: string }) => void;
+  onProgress?: (progress: {
+    stage: string;
+    progress: number;
+    message: string;
+  }) => void;
 }
 
 export interface ProcessResult {
@@ -58,13 +70,20 @@ export interface ProcessResult {
   };
 }
 
-export interface YouTubePlaylistOptions extends Omit<YouTubeProcessOptions, "onProgress" | "sourcePlaylist"> {
+export interface YouTubePlaylistOptions extends Omit<
+  YouTubeProcessOptions,
+  "onProgress" | "sourcePlaylist"
+> {
   maxVideos?: number;
   concurrency?: number;
   continueOnError?: boolean;
   skipExisting?: boolean;
   onStart?: (videos: PlaylistVideoStatus[], total: number) => void;
-  onProgress?: (contentId: string, status: PlaylistVideoStatusType, stage?: string) => void;
+  onProgress?: (
+    contentId: string,
+    status: PlaylistVideoStatusType,
+    stage?: string
+  ) => void;
 }
 
 /**
@@ -93,7 +112,12 @@ export async function processYouTube(
   const visualConfig = config.getVisual();
   const skipVisuals = options.skipVisuals ?? !visualConfig.enabled;
 
-  const progress = (stage: string, step: number, total: number, message: string) => {
+  const progress = (
+    stage: string,
+    step: number,
+    total: number,
+    message: string
+  ) => {
     options.onProgress?.({ stage, progress: (step / total) * 100, message });
   };
 
@@ -162,9 +186,18 @@ export async function processYouTube(
     const summarizeStart = Date.now();
 
     // Write transcript to temp file for summarize primitive
-    const transcriptPath = artifactStore.getArtifactPath(contentId, "transcription/json");
-    const metadataPath = artifactStore.getArtifactPath(contentId, "source/metadata");
-    const visualsPath = artifactStore.getArtifactPath(contentId, "inference/visual_analysis");
+    const transcriptPath = artifactStore.getArtifactPath(
+      contentId,
+      "transcription/json"
+    );
+    const metadataPath = artifactStore.getArtifactPath(
+      contentId,
+      "source/metadata"
+    );
+    const visualsPath = artifactStore.getArtifactPath(
+      contentId,
+      "inference/visual_analysis"
+    );
 
     const summarizeResult = await summarize(transcriptPath, {
       metadataPath,
@@ -180,12 +213,21 @@ export async function processYouTube(
 
     // Save artifacts
     artifactStore.saveSummary(contentId, summarizeResult.summary);
-    const outputPath = artifactStore.saveMarkdown(contentId, summarizeResult.markdown!);
+    const outputPath = artifactStore.saveMarkdown(
+      contentId,
+      summarizeResult.markdown!
+    );
 
     let skillPath: string | undefined;
     if (summarizeResult.skill) {
-      skillPath = artifactStore.saveSkill(contentId, summarizeResult.skill.skillMd);
-      artifactStore.saveSkillChecklist(contentId, summarizeResult.skill.checklist);
+      skillPath = artifactStore.saveSkill(
+        contentId,
+        summarizeResult.skill.skillMd
+      );
+      artifactStore.saveSkillChecklist(
+        contentId,
+        summarizeResult.skill.checklist
+      );
       stats.skillGenerationTime = 0; // included in summarization time
     }
 
@@ -235,7 +277,9 @@ export async function processYouTubePlaylist(
     ...videoOptions
   } = options;
 
-  const { metadata, entries } = await playlistExtractor.extract(url, { maxVideos });
+  const { metadata, entries } = await playlistExtractor.extract(url, {
+    maxVideos,
+  });
 
   const videoStatuses: PlaylistVideoStatus[] = entries.map((entry) => ({
     contentId: entry.contentId,
@@ -246,10 +290,16 @@ export async function processYouTubePlaylist(
   onStart?.(videoStatuses, entries.length);
 
   // Process videos
-  const processEntry = async (entry: PlaylistEntry, status: PlaylistVideoStatus) => {
+  const processEntry = async (
+    entry: PlaylistEntry,
+    status: PlaylistVideoStatus
+  ) => {
     if (skipExisting && artifactStore.hasVideo(entry.contentId)) {
       status.status = "skipped";
-      status.outputPath = artifactStore.getArtifactPath(entry.contentId, "output/markdown");
+      status.outputPath = artifactStore.getArtifactPath(
+        entry.contentId,
+        "output/markdown"
+      );
       onProgress?.(entry.contentId, "skipped");
       return;
     }
@@ -292,11 +342,15 @@ export async function processYouTubePlaylist(
     for (let i = 0; i < entries.length; i += concurrency) {
       const batch = entries.slice(i, i + concurrency);
       const batchStatuses = videoStatuses.slice(i, i + concurrency);
-      await Promise.all(batch.map((entry, j) => processEntry(entry, batchStatuses[j])));
+      await Promise.all(
+        batch.map((entry, j) => processEntry(entry, batchStatuses[j]))
+      );
     }
   }
 
-  const succeeded = videoStatuses.filter((v) => v.status === "completed").length;
+  const succeeded = videoStatuses.filter(
+    (v) => v.status === "completed"
+  ).length;
   const failed = videoStatuses.filter((v) => v.status === "failed").length;
   const skipped = videoStatuses.filter((v) => v.status === "skipped").length;
   const totalTime = Date.now() - startTime;
@@ -307,7 +361,10 @@ export async function processYouTubePlaylist(
     succeeded,
     failed,
     skipped,
-    stats: { totalTime, averageTimePerVideo: succeeded > 0 ? totalTime / succeeded : 0 },
+    stats: {
+      totalTime,
+      averageTimePerVideo: succeeded > 0 ? totalTime / succeeded : 0,
+    },
   };
 }
 
@@ -329,7 +386,9 @@ export async function checkYouTubePrerequisites(): Promise<{
     missing.push("ffmpeg (required for audio/video processing)");
   }
   if (!config.hasAnthropicKey()) {
-    missing.push("ANTHROPIC_API_KEY (required for summarization)");
+    missing.push(
+      "Anthropic API key in ~/.scrub/config.json (required for summarization)"
+    );
   }
 
   const transcribers = await getTranscriberDiagnostics();
@@ -346,10 +405,35 @@ export async function checkYouTubePrerequisites(): Promise<{
  */
 export async function getDiagnostics() {
   const transcribers = await getTranscriberDiagnostics();
+  const anthropicKey = config.hasAnthropicKey();
   return {
     ytdlp: await isYtDlpAvailable(),
     ffmpeg: await isFfmpegAvailable(),
-    anthropicKey: config.hasAnthropicKey(),
-    transcribers: transcribers.map((t) => ({ source: t.source, name: t.name, available: t.available })),
+    anthropicKey,
+    anthropicAuth: anthropicKey ? await pingAnthropic() : { ok: false as const, error: "no key" },
+    transcribers: transcribers.map((t) => ({
+      source: t.source,
+      name: t.name,
+      available: t.available,
+    })),
   };
+}
+
+async function pingAnthropic(): Promise<{ ok: true } | { ok: false; error: string }> {
+  const apiKey = config.getApiKey("anthropic");
+  if (!apiKey) return { ok: false, error: "no key" };
+  try {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    const client = new Anthropic({ apiKey, maxRetries: 0, timeout: 10000 });
+    await client.messages.create({
+      model: config.getSummarizer().model,
+      max_tokens: 1,
+      messages: [{ role: "user", content: "hi" }],
+    });
+    return { ok: true };
+  } catch (err) {
+    const e = err as { status?: number; message?: string };
+    const status = e?.status ? `${e.status} ` : "";
+    return { ok: false, error: `${status}${e?.message ?? String(err)}` };
+  }
 }

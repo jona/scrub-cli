@@ -4,7 +4,7 @@ import React from "react";
 import { render } from "ink";
 import { Command } from "commander";
 import { writeFileSync } from "fs";
-import { resolve } from "path";
+import { resolve, dirname } from "path";
 import { logger, fmt } from "../../utils/logger.js";
 import { config } from "../../infrastructure/Config.js";
 import {
@@ -377,8 +377,8 @@ program
       }
 
       if (result.skill) {
-        const skillPath = "./SKILL.md";
-        writeFileSync(resolve(skillPath), result.skill.skillMd);
+        const skillPath = resolve(dirname(outPath), "SKILL.md");
+        writeFileSync(skillPath, result.skill.skillMd);
         logger.keyValue("  Skill", skillPath);
       }
     } catch (error) {
@@ -411,18 +411,20 @@ program
 
     logger.newline();
     logger.info("API Keys:");
+    const anthropicLabel = !diag.anthropicKey
+      ? fmt.red("✗ missing")
+      : diag.anthropicAuth.ok
+        ? fmt.green("✓ authenticated")
+        : fmt.red(`✗ auth failed (${diag.anthropicAuth.error})`);
+    logger.keyValue("  Anthropic", anthropicLabel);
     logger.keyValue(
-      "  ANTHROPIC_API_KEY",
-      diag.anthropicKey ? fmt.green("✓ configured") : fmt.red("✗ missing")
-    );
-    logger.keyValue(
-      "  OPENAI_API_KEY",
+      "  OpenAI",
       config.getApiKey("openai")
         ? fmt.green("✓ configured")
         : fmt.dim("○ not set (optional)")
     );
     logger.keyValue(
-      "  DEEPGRAM_API_KEY",
+      "  Deepgram",
       config.getApiKey("deepgram")
         ? fmt.green("✓ configured")
         : fmt.dim("○ not set (optional)")
@@ -445,17 +447,20 @@ program
       configPath ? fmt.path(configPath) : fmt.dim("using defaults")
     );
     logger.keyValue("  Output dir", fmt.path(config.getOutputDir()));
+    logger.keyValue("  Cache dir", fmt.path(config.getCacheDir()));
 
     logger.newline();
     const ready =
       diag.ytdlp &&
       diag.ffmpeg &&
       diag.anthropicKey &&
+      diag.anthropicAuth.ok &&
       diag.transcribers.some((t) => t.available);
     if (ready) {
       logger.success("System is ready!");
     } else {
       logger.warn("Some requirements are missing. See above for details.");
+      process.exitCode = 1;
     }
   });
 
@@ -480,7 +485,7 @@ program
 
     logger.newline();
     logger.info(
-      "Adapters are tried in priority order. Configure in scrub.config.json."
+      "Adapters are tried in priority order. Configure in ~/.scrub/config.json."
     );
   });
 
