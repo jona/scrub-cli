@@ -16,8 +16,8 @@ export interface TranscriptSegment {
  * Source identifier for the transcription method used
  */
 export type TranscriptionSource =
-  | "local-whisper"
   | "faster-whisper"
+  | "local-whisper"
   | "openai"
   | "deepgram"
   | "youtube-captions";
