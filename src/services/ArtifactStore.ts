@@ -16,8 +16,8 @@ import type {
   ArtifactType,
   MediaMetadata,
   SummaryResult,
+  SceneFrame,
   VisualAnalysis,
-  SkillChecklist,
   SourcePlaylist,
 } from "../types/index.js";
 import type { TranscriptionResult } from "../transcription/ITranscriber.js";
@@ -37,17 +37,19 @@ const INDEX_VERSION = "1.0.0";
  * │   │   ├── video.mp4
  * │   │   └── metadata.json
  * │   ├── frames/
- * │   │   └── frame_*.png
+ * │   │   ├── frame_*.png
+ * │   │   └── frames.json
  * │   ├── transcription/
  * │   │   ├── transcript.json
  * │   │   └── transcript.txt
- * │   ├── inference/
+ * │   ├── prompt/                  (scrub's deterministic output)
+ * │   │   ├── summary.prompt.md
+ * │   │   └── summary.schema.json
+ * │   ├── inference/               (harness-produced, optional)
  * │   │   ├── summary.json
- * │   │   ├── visual_analysis.json
- * │   │   └── skill_checklist.json
- * │   ├── output/
- * │   │   ├── summary.md
- * │   │   └── SKILL.md
+ * │   │   └── visual_analysis.json
+ * │   ├── output/                  (rendered from a model's summary.json)
+ * │   │   └── summary.md
  * │   └── stats.json
  * └── index.json
  */
@@ -147,14 +149,21 @@ export class ArtifactStore {
   }
 
   /**
-   * Get the inference directory for a video
+   * Get the prompt directory for a video (scrub's deterministic output)
+   */
+  getPromptDir(contentId: string): string {
+    return join(this.getVideoDir(contentId), "prompt");
+  }
+
+  /**
+   * Get the inference directory for a video (harness-produced artifacts)
    */
   getInferenceDir(contentId: string): string {
     return join(this.getVideoDir(contentId), "inference");
   }
 
   /**
-   * Get the output directory for a video (markdown, skill)
+   * Get the output directory for a video (rendered markdown)
    */
   getOutputSubdir(contentId: string): string {
     return join(this.getVideoDir(contentId), "output");
@@ -169,6 +178,7 @@ export class ArtifactStore {
       this.getSourceDir(contentId),
       this.getFramesDir(contentId),
       this.getTranscriptionDir(contentId),
+      this.getPromptDir(contentId),
       this.getInferenceDir(contentId),
       this.getOutputSubdir(contentId),
     ];
@@ -210,20 +220,22 @@ export class ArtifactStore {
         return join(videoDir, "source", "metadata.json");
       case "frames":
         return join(videoDir, "frames");
+      case "frames/json":
+        return join(videoDir, "frames", "frames.json");
       case "transcription/json":
         return join(videoDir, "transcription", "transcript.json");
       case "transcription/txt":
         return join(videoDir, "transcription", "transcript.txt");
+      case "prompt/summary":
+        return join(videoDir, "prompt", "summary.prompt.md");
+      case "prompt/schema":
+        return join(videoDir, "prompt", "summary.schema.json");
       case "inference/summary":
         return join(videoDir, "inference", "summary.json");
       case "inference/visual_analysis":
         return join(videoDir, "inference", "visual_analysis.json");
-      case "inference/skill_checklist":
-        return join(videoDir, "inference", "skill_checklist.json");
       case "output/markdown":
         return join(videoDir, "output", "summary.md");
-      case "output/skill":
-        return join(videoDir, "output", "SKILL.md");
       default:
         throw new Error(`Unknown artifact type: ${type}`);
     }
@@ -313,22 +325,33 @@ export class ArtifactStore {
   }
 
   /**
-   * Save skill checklist
+   * Save the frame manifest (timestamps + relative paths) as frames.json
    */
-  saveSkillChecklist(contentId: string, checklist: SkillChecklist): void {
+  saveFramesManifest(contentId: string, frames: SceneFrame[]): string {
     this.ensureVideoDirectories(contentId);
-    const path = this.getArtifactPath(contentId, "inference/skill_checklist");
-    writeFileSync(path, JSON.stringify(checklist, null, 2), "utf-8");
-    logger.debug(`Saved skill checklist to ${path}`);
+    const path = this.getArtifactPath(contentId, "frames/json");
+    const videoDir = this.getVideoDir(contentId);
+    const manifest = frames.map((f) => ({
+      timestamp: f.timestamp,
+      path: relative(videoDir, f.framePath),
+      score: f.score,
+    }));
+    writeFileSync(path, JSON.stringify(manifest, null, 2), "utf-8");
+    logger.debug(`Saved frames manifest to ${path}`);
+    return path;
   }
 
   /**
-   * Load skill checklist
+   * Save the assembled summary prompt + output schema (scrub's deterministic output)
    */
-  loadSkillChecklist(contentId: string): SkillChecklist | null {
-    const path = this.getArtifactPath(contentId, "inference/skill_checklist");
-    if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, "utf-8"));
+  savePrompt(contentId: string, prompt: string, schema: unknown): string {
+    this.ensureVideoDirectories(contentId);
+    const promptPath = this.getArtifactPath(contentId, "prompt/summary");
+    const schemaPath = this.getArtifactPath(contentId, "prompt/schema");
+    writeFileSync(promptPath, prompt, "utf-8");
+    writeFileSync(schemaPath, JSON.stringify(schema, null, 2), "utf-8");
+    logger.debug(`Saved prompt to ${promptPath} and schema to ${schemaPath}`);
+    return promptPath;
   }
 
   /**
@@ -349,17 +372,6 @@ export class ArtifactStore {
     const path = this.getArtifactPath(contentId, "output/markdown");
     if (!existsSync(path)) return null;
     return readFileSync(path, "utf-8");
-  }
-
-  /**
-   * Save skill file
-   */
-  saveSkill(contentId: string, skillMd: string): string {
-    this.ensureVideoDirectories(contentId);
-    const path = this.getArtifactPath(contentId, "output/skill");
-    writeFileSync(path, skillMd, "utf-8");
-    logger.debug(`Saved skill to ${path}`);
-    return path;
   }
 
   /**
@@ -429,20 +441,9 @@ export class ArtifactStore {
           hasJson: this.hasArtifact(contentId, "transcription/json"),
           hasTxt: this.hasArtifact(contentId, "transcription/txt"),
         },
-        inference: {
-          summary: this.hasArtifact(contentId, "inference/summary"),
-          visualAnalysis: this.hasArtifact(
-            contentId,
-            "inference/visual_analysis"
-          ),
-          skillChecklist: this.hasArtifact(
-            contentId,
-            "inference/skill_checklist"
-          ),
-        },
-        output: {
-          markdown: this.hasArtifact(contentId, "output/markdown"),
-          skill: this.hasArtifact(contentId, "output/skill"),
+        prompt: {
+          summary: this.hasArtifact(contentId, "prompt/summary"),
+          schema: this.hasArtifact(contentId, "prompt/schema"),
         },
       },
       stats,

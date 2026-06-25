@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type {
-  MediaMetadata,
-  SummaryResult,
-  SkillGenerationResult,
-} from "../../src/types/index.js";
+import type { MediaMetadata, SceneFrame } from "../../src/types/index.js";
 import type { TranscriptionResult } from "../../src/transcription/ITranscriber.js";
 
 const MOCK_VIDEO_ID = "56kq0VTkU4k";
@@ -42,50 +38,10 @@ const mockTranscript: TranscriptionResult = {
   source: "youtube-captions",
 };
 
-const mockSummary: SummaryResult = {
-  title: mockMetadata.title,
-  tldr: "TypeScript adds static typing to JavaScript.",
-  overview: "This video introduces TypeScript.",
-  thesisAndClaims: {
-    thesis: "TypeScript improves development.",
-    keyClaims: [],
-  },
-  actionableInsights: [],
-  concepts: [],
-  mentalModels: [],
-  structureMap: [],
-  openQuestions: [],
-  notableQuotes: [],
-  biasAnalysis: { perspective: "", possibleBiases: [], blindSpots: [] },
-  knowledgeGraph: {
-    topics: [],
-    people: [],
-    tools: [],
-    technologies: [],
-    relationships: [],
-  },
-  difficulty: { level: "beginner", prerequisites: [], targetAudience: "" },
-  reusabilityPrompts: {},
-  confidence: { level: "high", reasoning: "" },
-  sections: [],
-  keyTakeaways: [],
-  codeSnippets: [],
-  references: [],
-};
-
-const mockSkill: SkillGenerationResult = {
-  skillMd: "---\nname: test\n---\n# Test Skill",
-  checklist: {
-    name: { covered: true, source: "summary" },
-    description: { covered: true, source: "summary" },
-    triggerScenarios: { covered: true, source: "summary" },
-    domainKnowledge: { covered: true, source: "summary" },
-    workflows: { covered: false, source: null },
-    examples: { covered: false, source: null },
-    codeSnippets: { covered: false, source: null },
-    templates: { covered: false, source: null },
-  },
-  suggestedName: "test-skill",
+const mockPromptResult = {
+  prompt: "## METADATA\n- Title: Test Video: Introduction to TypeScript\n...",
+  schema: { type: "object", title: "ScrubSummary" },
+  metadata: mockMetadata,
 };
 
 vi.mock("../../src/core/download.js", () => ({
@@ -100,12 +56,12 @@ vi.mock("../../src/core/transcribe.js", () => ({
   getTranscriberDiagnostics: vi.fn(),
 }));
 
-vi.mock("../../src/core/analyze-visuals.js", () => ({
-  analyzeVisuals: vi.fn(),
+vi.mock("../../src/core/extract-frames.js", () => ({
+  extractFrames: vi.fn(),
 }));
 
-vi.mock("../../src/core/summarize.js", () => ({
-  summarize: vi.fn(),
+vi.mock("../../src/core/prompt.js", () => ({
+  buildPromptArtifacts: vi.fn(),
 }));
 
 vi.mock("../../src/services/ArtifactStore.js", () => ({
@@ -117,11 +73,8 @@ vi.mock("../../src/services/ArtifactStore.js", () => ({
     saveMetadata: vi.fn(),
     loadTranscription: vi.fn(),
     saveTranscription: vi.fn(),
-    saveVisualAnalysis: vi.fn(),
-    saveSummary: vi.fn(),
-    saveMarkdown: vi.fn(),
-    saveSkill: vi.fn(),
-    saveSkillChecklist: vi.fn(),
+    saveFramesManifest: vi.fn(),
+    savePrompt: vi.fn(),
     finalizeArtifacts: vi.fn(),
     hasVideo: vi.fn(),
   },
@@ -135,7 +88,6 @@ vi.mock("../../src/services/PlaylistExtractor.js", () => ({
 
 vi.mock("../../src/infrastructure/Config.js", () => ({
   config: {
-    hasAnthropicKey: vi.fn(),
     getApiKey: vi.fn(),
     getVisual: vi.fn(),
     getOutput: vi.fn(),
@@ -157,20 +109,18 @@ import {
   getTranscriberDiagnostics,
   transcribe,
 } from "../../src/core/transcribe.js";
-import { analyzeVisuals } from "../../src/core/analyze-visuals.js";
-import { summarize } from "../../src/core/summarize.js";
+import { extractFrames } from "../../src/core/extract-frames.js";
+import { buildPromptArtifacts } from "../../src/core/prompt.js";
 import { artifactStore } from "../../src/services/ArtifactStore.js";
 import { config } from "../../src/infrastructure/Config.js";
 
 function resetMocks(): void {
   vi.clearAllMocks();
 
-  vi.mocked(config.hasAnthropicKey).mockReturnValue(true);
   vi.mocked(config.getVisual).mockReturnValue({
     enabled: true,
     sceneThreshold: 0.4,
     maxFrames: 20,
-    model: "claude-opus-4-6",
   });
   vi.mocked(config.getOutput).mockReturnValue({
     directory: "./output",
@@ -197,11 +147,8 @@ function resetMocks(): void {
     },
   ]);
 
-  vi.mocked(analyzeVisuals).mockResolvedValue([]);
-  vi.mocked(summarize).mockResolvedValue({
-    summary: mockSummary,
-    markdown: "# Test Video: Introduction to TypeScript\n\n## Summary",
-  });
+  vi.mocked(extractFrames).mockResolvedValue([]);
+  vi.mocked(buildPromptArtifacts).mockReturnValue(mockPromptResult);
 
   vi.mocked(artifactStore.getSourceDir).mockReturnValue("/tmp/source");
   vi.mocked(artifactStore.getFramesDir).mockReturnValue("/tmp/frames");
@@ -209,10 +156,9 @@ function resetMocks(): void {
     (contentId: string, type: string) => `/tmp/${contentId}/${type}.json`
   );
   vi.mocked(artifactStore.loadTranscription).mockReturnValue(null);
-  vi.mocked(artifactStore.saveMarkdown).mockReturnValue(
-    "/tmp/output/summary.md"
+  vi.mocked(artifactStore.savePrompt).mockReturnValue(
+    "/tmp/output/summary.prompt.md"
   );
-  vi.mocked(artifactStore.saveSkill).mockReturnValue("/tmp/output/SKILL.md");
   vi.mocked(artifactStore.hasVideo).mockReturnValue(false);
 }
 
@@ -222,14 +168,14 @@ describe("YouTube Orchestrator Integration", () => {
   });
 
   describe("processYouTube()", () => {
-    it("processes a video through the download, transcribe, summarize, and artifact pipeline", async () => {
+    it("processes a video through the download, transcribe, and prompt pipeline", async () => {
       const result = await processYouTube(MOCK_URL, { skipVisuals: true });
 
       expect(result.metadata).toEqual(mockMetadata);
       expect(result.transcript).toEqual(mockTranscript);
-      expect(result.summary).toEqual(mockSummary);
-      expect(result.markdown).toContain("TypeScript");
-      expect(result.outputPath).toBe("/tmp/output/summary.md");
+      expect(result.frames).toEqual([]);
+      expect(result.promptPath).toBe("/tmp/output/summary.prompt.md");
+      expect(result.outputPath).toBe("/tmp/output/summary.prompt.md");
       expect(result.stats.totalTime).toBeGreaterThanOrEqual(0);
 
       expect(fetchYouTubeMetadata).toHaveBeenCalledWith(MOCK_URL);
@@ -245,9 +191,11 @@ describe("YouTube Orchestrator Integration", () => {
         "/tmp/test-audio.wav",
         expect.objectContaining({ youtubeUrl: MOCK_URL })
       );
-      expect(summarize).toHaveBeenCalledWith(
+      expect(buildPromptArtifacts).toHaveBeenCalledWith(
         `/tmp/${MOCK_VIDEO_ID}/transcription/json.json`,
-        expect.objectContaining({ outputMarkdown: true })
+        expect.objectContaining({
+          metadataPath: `/tmp/${MOCK_VIDEO_ID}/source/metadata.json`,
+        })
       );
       expect(artifactStore.saveMetadata).toHaveBeenCalledWith(
         MOCK_VIDEO_ID,
@@ -257,13 +205,10 @@ describe("YouTube Orchestrator Integration", () => {
         MOCK_VIDEO_ID,
         mockTranscript
       );
-      expect(artifactStore.saveSummary).toHaveBeenCalledWith(
+      expect(artifactStore.savePrompt).toHaveBeenCalledWith(
         MOCK_VIDEO_ID,
-        mockSummary
-      );
-      expect(artifactStore.saveMarkdown).toHaveBeenCalledWith(
-        MOCK_VIDEO_ID,
-        expect.stringContaining("TypeScript")
+        mockPromptResult.prompt,
+        mockPromptResult.schema
       );
       expect(artifactStore.finalizeArtifacts).toHaveBeenCalledWith(
         MOCK_VIDEO_ID,
@@ -288,24 +233,20 @@ describe("YouTube Orchestrator Integration", () => {
       expect(artifactStore.saveTranscription).not.toHaveBeenCalled();
     });
 
-    it("runs visual analysis when enabled and video is downloaded", async () => {
-      vi.mocked(analyzeVisuals).mockResolvedValueOnce([
-        {
-          timestamp: 12,
-          description: "A slide about TypeScript",
-          extractedText: "TypeScript",
-          visualType: "slide",
-        },
-      ]);
+    it("extracts key frames when enabled and a video is downloaded", async () => {
+      const frames: SceneFrame[] = [
+        { timestamp: 12, framePath: "/tmp/frames/frame_001.png" },
+      ];
+      vi.mocked(extractFrames).mockResolvedValueOnce(frames);
 
       const result = await processYouTube(MOCK_URL);
 
-      expect(result.visuals).toHaveLength(1);
+      expect(result.frames).toEqual(frames);
       expect(download).toHaveBeenCalledWith(
         MOCK_URL,
         expect.objectContaining({ skipVideo: false })
       );
-      expect(analyzeVisuals).toHaveBeenCalledWith(
+      expect(extractFrames).toHaveBeenCalledWith(
         "/tmp/test-video.mp4",
         expect.objectContaining({
           outputDir: "/tmp/frames",
@@ -313,38 +254,9 @@ describe("YouTube Orchestrator Integration", () => {
           maxFrames: undefined,
         })
       );
-      expect(artifactStore.saveVisualAnalysis).toHaveBeenCalled();
-    });
-
-    it("saves generated skill artifacts when skill generation is enabled", async () => {
-      vi.mocked(summarize).mockResolvedValueOnce({
-        summary: mockSummary,
-        markdown: "# Test Video",
-        skill: mockSkill,
-      });
-
-      const result = await processYouTube(MOCK_URL, {
-        skipVisuals: true,
-        generateSkill: true,
-        skillName: "test-skill",
-      });
-
-      expect(result.skillResult).toEqual(mockSkill);
-      expect(result.skillPath).toBe("/tmp/output/SKILL.md");
-      expect(summarize).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          outputSkill: true,
-          skillName: "test-skill",
-        })
-      );
-      expect(artifactStore.saveSkill).toHaveBeenCalledWith(
+      expect(artifactStore.saveFramesManifest).toHaveBeenCalledWith(
         MOCK_VIDEO_ID,
-        mockSkill.skillMd
-      );
-      expect(artifactStore.saveSkillChecklist).toHaveBeenCalledWith(
-        MOCK_VIDEO_ID,
-        mockSkill.checklist
+        frames
       );
     });
 
@@ -357,7 +269,7 @@ describe("YouTube Orchestrator Integration", () => {
       });
 
       expect(stages).toEqual(
-        expect.arrayContaining(["download", "transcribe", "summarize"])
+        expect.arrayContaining(["download", "transcribe", "prompt"])
       );
     });
 
@@ -380,7 +292,7 @@ describe("YouTube Orchestrator Integration", () => {
   });
 
   describe("checkYouTubePrerequisites()", () => {
-    it("reports ready when required tools and config are available", async () => {
+    it("reports ready when required tools are available", async () => {
       const result = await checkYouTubePrerequisites();
 
       expect(result).toEqual({ ready: true, missing: [], warnings: [] });
@@ -389,7 +301,6 @@ describe("YouTube Orchestrator Integration", () => {
     it("reports missing required dependencies", async () => {
       vi.mocked(isYtDlpAvailable).mockResolvedValueOnce(false);
       vi.mocked(isFfmpegAvailable).mockResolvedValueOnce(false);
-      vi.mocked(config.hasAnthropicKey).mockReturnValueOnce(false);
 
       const result = await checkYouTubePrerequisites();
 
@@ -397,7 +308,6 @@ describe("YouTube Orchestrator Integration", () => {
       expect(result.missing).toEqual([
         "yt-dlp (required for YouTube video download)",
         "ffmpeg (required for audio/video processing)",
-        "Anthropic API key in ~/.scrub/config.json (required for summarization)",
       ]);
     });
 
@@ -412,14 +322,12 @@ describe("YouTube Orchestrator Integration", () => {
   });
 
   describe("getDiagnostics()", () => {
-    it("returns external tool, API key, and transcriber diagnostics", async () => {
+    it("returns external tool and transcriber diagnostics", async () => {
       const diagnostics = await getDiagnostics();
 
       expect(diagnostics).toEqual({
         ytdlp: true,
         ffmpeg: true,
-        anthropicKey: true,
-        anthropicAuth: { ok: false, error: "no key" },
         transcribers: [
           {
             source: "youtube-captions",

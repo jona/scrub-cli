@@ -1,12 +1,12 @@
 /**
  * file — Orchestrator for processing local .mp3/.mp4 files
  *
- * Chains: prepare → transcribe → (analyzeVisuals if mp4) → summarize
- * Manages artifact storage, caching, and progress callbacks.
+ * Chains: prepare → transcribe → (extractFrames if mp4) → emit prompt artifacts
+ * Manages artifact storage, caching, and progress callbacks. Fully deterministic —
+ * an agent harness consumes the emitted prompt + schema to produce a summary.
  */
 
 import { basename, extname } from "path";
-import { config } from "../infrastructure/Config.js";
 import { logger } from "../utils/logger.js";
 import {
   prepare,
@@ -14,12 +14,13 @@ import {
   getLocalFileType,
 } from "../core/prepare.js";
 import { transcribe } from "../core/transcribe.js";
-import { analyzeVisuals } from "../core/analyze-visuals.js";
-import { summarize } from "../core/summarize.js";
+import { extractFrames } from "../core/extract-frames.js";
+import { buildPromptArtifacts } from "../core/prompt.js";
 import { isFfmpegAvailable } from "../core/download.js";
 import { getTranscriberDiagnostics } from "../core/transcribe.js";
+import { config } from "../infrastructure/Config.js";
 import { artifactStore } from "../services/ArtifactStore.js";
-import type { VisualAnalysis } from "../types/index.js";
+import type { SceneFrame } from "../types/index.js";
 import type { TranscriptionSource } from "../transcription/ITranscriber.js";
 import type { ProcessResult } from "./youtube.js";
 
@@ -28,8 +29,6 @@ export interface FileProcessOptions {
   transcriber?: TranscriptionSource;
   sceneThreshold?: number;
   maxFrames?: number;
-  generateSkill?: boolean;
-  skillName?: string;
   verbose?: boolean;
   onProgress?: (progress: {
     stage: string;
@@ -49,8 +48,8 @@ export async function processFile(
   const stats: ProcessResult["stats"] = {
     downloadTime: 0,
     transcriptionTime: 0,
-    visualAnalysisTime: 0,
-    summarizationTime: 0,
+    frameExtractionTime: 0,
+    promptTime: 0,
     totalTime: 0,
   };
 
@@ -117,30 +116,30 @@ export async function processFile(
       artifactStore.saveTranscription(contentId, transcript);
     }
 
-    // Step 3: Visual analysis (mp4 only)
-    let visuals: VisualAnalysis[] = [];
+    // Step 3: Extract key frames (mp4 only; vision is the harness's job)
+    let frames: SceneFrame[] = [];
     if (!skipVisuals && prepareResult.videoPath) {
-      progress("scene-detect", 3, 5, "Detecting scenes...");
-      const visualStart = Date.now();
+      progress("extract-frames", 3, 4, "Extracting key frames...");
+      const framesStart = Date.now();
 
       const framesDir = artifactStore.getFramesDir(contentId);
-      visuals = await analyzeVisuals(prepareResult.videoPath, {
+      frames = await extractFrames(prepareResult.videoPath, {
         outputDir: framesDir,
         threshold: options.sceneThreshold,
         maxFrames: options.maxFrames,
-        onProgress: (msg) => progress("visual-analyze", 3, 5, msg),
+        onProgress: (msg) => progress("extract-frames", 3, 4, msg),
       });
 
-      stats.visualAnalysisTime = Date.now() - visualStart;
+      stats.frameExtractionTime = Date.now() - framesStart;
 
-      if (visuals.length > 0) {
-        artifactStore.saveVisualAnalysis(contentId, visuals);
+      if (frames.length > 0) {
+        artifactStore.saveFramesManifest(contentId, frames);
       }
     }
 
-    // Step 4: Summarize
-    progress("summarize", 4, 5, "Generating summary...");
-    const summarizeStart = Date.now();
+    // Step 4: Assemble the summary prompt + output schema
+    progress("prompt", 4, 4, "Assembling summary prompt...");
+    const promptStart = Date.now();
 
     const transcriptPath = artifactStore.getArtifactPath(
       contentId,
@@ -150,42 +149,15 @@ export async function processFile(
       contentId,
       "source/metadata"
     );
-    const visualsPath = artifactStore.getArtifactPath(
-      contentId,
-      "inference/visual_analysis"
-    );
 
-    const summarizeResult = await summarize(transcriptPath, {
+    const { prompt, schema } = buildPromptArtifacts(transcriptPath, {
       metadataPath,
-      visualsPath: visuals.length > 0 ? visualsPath : undefined,
-      outputMarkdown: true,
-      outputSkill: options.generateSkill,
-      skillName: options.skillName,
-      transcriptPath,
-      onProgress: (msg) => progress("summarize", 4, 5, msg),
+      onProgress: (msg) => progress("prompt", 4, 4, msg),
     });
 
-    stats.summarizationTime = Date.now() - summarizeStart;
+    const promptPath = artifactStore.savePrompt(contentId, prompt, schema);
 
-    // Save artifacts
-    artifactStore.saveSummary(contentId, summarizeResult.summary);
-    const outputPath = artifactStore.saveMarkdown(
-      contentId,
-      summarizeResult.markdown!
-    );
-
-    let skillPath: string | undefined;
-    if (summarizeResult.skill) {
-      skillPath = artifactStore.saveSkill(
-        contentId,
-        summarizeResult.skill.skillMd
-      );
-      artifactStore.saveSkillChecklist(
-        contentId,
-        summarizeResult.skill.checklist
-      );
-    }
-
+    stats.promptTime = Date.now() - promptStart;
     stats.totalTime = Date.now() - startTime;
 
     // Finalize
@@ -199,12 +171,9 @@ export async function processFile(
     return {
       metadata: prepareResult.metadata,
       transcript,
-      visuals,
-      summary: summarizeResult.summary,
-      markdown: summarizeResult.markdown!,
-      outputPath,
-      skillPath,
-      skillResult: summarizeResult.skill,
+      frames,
+      promptPath,
+      outputPath: promptPath,
       stats,
     };
   } catch (error) {
@@ -227,11 +196,6 @@ export async function checkFilePrerequisites(): Promise<{
   // yt-dlp NOT required for local files
   if (!(await isFfmpegAvailable())) {
     missing.push("ffmpeg (required for audio extraction)");
-  }
-  if (!config.hasAnthropicKey()) {
-    missing.push(
-      "Anthropic API key in ~/.scrub/config.json (required for summarization)"
-    );
   }
 
   const transcribers = await getTranscriberDiagnostics();

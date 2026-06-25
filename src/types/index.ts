@@ -305,14 +305,7 @@ export interface SummaryResult {
  * Processing progress information
  */
 export interface ProcessingProgress {
-  stage:
-    | "download"
-    | "transcribe"
-    | "scene-detect"
-    | "visual-analyze"
-    | "summarize"
-    | "generate"
-    | "skill-generate";
+  stage: "download" | "transcribe" | "extract-frames" | "prompt";
   progress: number;
   message: string;
 }
@@ -323,60 +316,25 @@ export interface ProcessingProgress {
 export type ProgressCallback = (progress: ProcessingProgress) => void;
 
 /**
- * Source type for skill checklist items
- */
-export type SkillSourceType = "summary" | "transcript" | "inferred" | null;
-
-/**
- * Individual checklist item for skill coverage assessment
- */
-export interface SkillChecklistItem {
-  covered: boolean;
-  source: SkillSourceType;
-  gaps?: string[];
-}
-
-/**
- * Checklist assessing what skill components can be derived from video content
- */
-export interface SkillChecklist {
-  name: SkillChecklistItem;
-  description: SkillChecklistItem;
-  triggerScenarios: SkillChecklistItem;
-  domainKnowledge: SkillChecklistItem;
-  workflows: SkillChecklistItem;
-  examples: SkillChecklistItem;
-  codeSnippets: SkillChecklistItem;
-  templates: SkillChecklistItem;
-}
-
-/**
- * Result from skill generation
- */
-export interface SkillGenerationResult {
-  /** The generated SKILL.md content */
-  skillMd: string;
-  /** Checklist of skill components covered */
-  checklist: SkillChecklist;
-  /** Suggested skill name derived from video */
-  suggestedName: string;
-}
-
-/**
  * Artifact types for type-safe references
+ *
+ * Scrub produces the deterministic artifacts (source, frames, transcription,
+ * prompt). The `inference/*` and `output/markdown` artifacts are produced by an
+ * agent harness (or scrub's own `render` primitive given a model's response).
  */
 export type ArtifactType =
   | "source/audio"
   | "source/video"
   | "source/metadata"
   | "frames"
+  | "frames/json"
   | "transcription/json"
   | "transcription/txt"
+  | "prompt/summary"
+  | "prompt/schema"
   | "inference/summary"
   | "inference/visual_analysis"
-  | "inference/skill_checklist"
-  | "output/markdown"
-  | "output/skill";
+  | "output/markdown";
 
 /**
  * Manifest tracking all artifacts for processed media
@@ -410,23 +368,17 @@ export interface ArtifactManifest {
       hasJson: boolean;
       hasTxt: boolean;
     };
-    inference: {
+    prompt: {
       summary: boolean;
-      visualAnalysis: boolean;
-      skillChecklist: boolean;
-    };
-    output: {
-      markdown: boolean;
-      skill: boolean;
+      schema: boolean;
     };
   };
   /** Processing statistics */
   stats: {
     downloadTime: number;
     transcriptionTime: number;
-    visualAnalysisTime: number;
-    summarizationTime: number;
-    skillGenerationTime?: number;
+    frameExtractionTime: number;
+    promptTime: number;
     totalTime: number;
   };
 }

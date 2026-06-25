@@ -4,7 +4,7 @@ import React from "react";
 import { render } from "ink";
 import { Command } from "commander";
 import { writeFileSync } from "fs";
-import { resolve, dirname } from "path";
+import { resolve, dirname, relative } from "path";
 import { logger, fmt } from "../../utils/logger.js";
 import { config } from "../../infrastructure/Config.js";
 import {
@@ -21,8 +21,9 @@ import {
   transcribe,
   getTranscriberDiagnostics,
 } from "../../core/transcribe.js";
-import { analyzeVisuals } from "../../core/analyze-visuals.js";
-import { summarize } from "../../core/summarize.js";
+import { extractFrames } from "../../core/extract-frames.js";
+import { buildPromptArtifacts } from "../../core/prompt.js";
+import { renderSummaryFile } from "../../core/render.js";
 import { artifactStore } from "../../services/ArtifactStore.js";
 import { App } from "./components/App.js";
 import type { TranscriptionSource } from "../../transcription/ITranscriber.js";
@@ -53,9 +54,7 @@ program
     "Scene detection sensitivity (0-1)",
     parseFloat
   )
-  .option("--max-frames <number>", "Maximum frames to analyze", parseInt)
-  .option("--skill", "Generate SKILL.md from content")
-  .option("--skill-name <name>", "Custom skill name")
+  .option("--max-frames <number>", "Maximum frames to extract", parseInt)
   .option("-v, --verbose", "Show detailed progress")
   .option(
     "--max-videos <number>",
@@ -93,8 +92,6 @@ program
             transcriber: options.transcriber as TranscriptionSource | undefined,
             sceneThreshold: options.sceneThreshold,
             maxFrames: options.maxFrames,
-            generateSkill: options.skill,
-            skillName: options.skillName,
             verbose: options.verbose,
             maxVideos: options.maxVideos || 0,
             concurrency: options.parallel || 1,
@@ -133,9 +130,7 @@ program
     "Scene detection sensitivity (0-1)",
     parseFloat
   )
-  .option("--max-frames <number>", "Maximum frames to analyze", parseInt)
-  .option("--skill", "Generate SKILL.md from content")
-  .option("--skill-name <name>", "Custom skill name")
+  .option("--max-frames <number>", "Maximum frames to extract", parseInt)
   .option("-v, --verbose", "Show detailed progress")
   .action(async (filePath: string, options) => {
     if (options.verbose) logger.setVerbose(true);
@@ -159,8 +154,6 @@ program
         transcriber: options.transcriber as TranscriptionSource | undefined,
         sceneThreshold: options.sceneThreshold,
         maxFrames: options.maxFrames,
-        generateSkill: options.skill,
-        skillName: options.skillName,
         verbose: options.verbose,
         onProgress: (progress) => {
           logger.info(`[${progress.stage}] ${progress.message}`);
@@ -168,8 +161,7 @@ program
       });
 
       logger.success(`Processed: ${result.metadata.title}`);
-      logger.keyValue("  Output", result.outputPath);
-      if (result.skillPath) logger.keyValue("  Skill", result.skillPath);
+      logger.keyValue("  Prompt", result.promptPath);
       logger.keyValue(
         "  Time",
         `${(result.stats.totalTime / 1000).toFixed(1)}s`
@@ -288,13 +280,13 @@ program
   });
 
 program
-  .command("analyze-visuals")
-  .description("Analyze visual content from a video file")
+  .command("extract-frames")
+  .description("Extract key frames from a video file via scene detection")
   .argument("<video-path>", "Path to video file")
   .option(
     "-o, --output <path>",
-    "Output path for visual analysis JSON",
-    "./visual_analysis.json"
+    "Output path for the frames manifest JSON",
+    "./frames.json"
   )
   .option("--output-dir <dir>", "Directory for extracted frames", "./frames")
   .option(
@@ -302,14 +294,14 @@ program
     "Scene detection sensitivity (0-1)",
     parseFloat
   )
-  .option("--max-frames <number>", "Maximum frames to analyze", parseInt)
+  .option("--max-frames <number>", "Maximum frames to extract", parseInt)
   .action(async (videoPath: string, options) => {
     try {
       const { mkdirSync, existsSync } = await import("fs");
       const framesDir = resolve(options.outputDir);
       if (!existsSync(framesDir)) mkdirSync(framesDir, { recursive: true });
 
-      const result = await analyzeVisuals(videoPath, {
+      const frames = await extractFrames(videoPath, {
         outputDir: framesDir,
         threshold: options.sceneThreshold,
         maxFrames: options.maxFrames,
@@ -317,9 +309,14 @@ program
       });
 
       const outPath = resolve(options.output);
-      writeFileSync(outPath, JSON.stringify(result, null, 2));
-      logger.success(`Analyzed ${result.length} frames`);
-      logger.keyValue("  Output", outPath);
+      const manifest = frames.map((f) => ({
+        timestamp: f.timestamp,
+        path: relative(dirname(outPath), f.framePath),
+        score: f.score,
+      }));
+      writeFileSync(outPath, JSON.stringify(manifest, null, 2));
+      logger.success(`Extracted ${frames.length} frames`);
+      logger.keyValue("  Manifest", outPath);
       logger.keyValue("  Frames", framesDir);
     } catch (error) {
       logger.error((error as Error).message);
@@ -328,59 +325,75 @@ program
   });
 
 program
-  .command("summarize")
+  .command("prompt")
   .description(
-    "Summarize content from any file (.json transcript, .txt, .md, etc.)"
+    "Assemble a model-agnostic summary prompt + output schema from a content file"
   )
-  .argument("<file>", "Path to content file")
+  .argument("<file>", "Path to content file (.json transcript, .txt, .md, etc.)")
   .option(
     "-o, --output <path>",
-    "Output path for summary JSON",
-    "./summary.json"
+    "Output path for the assembled prompt",
+    "./summary.prompt.md"
   )
-  .option("--markdown [path]", "Also output markdown summary")
-  .option("--skill", "Also output SKILL.md")
-  .option("--skill-name <name>", "Custom skill name (implies --skill)")
-  .option("--metadata <path>", "Path to metadata.json to enrich summary")
-  .option("--visuals <path>", "Path to visual_analysis.json to enrich summary")
   .option(
-    "--transcript <path>",
-    "Path to transcript.json (for skill generation)"
+    "--schema <path>",
+    "Output path for the JSON output schema",
+    "./summary.schema.json"
+  )
+  .option("--metadata <path>", "Path to metadata.json to enrich the prompt")
+  .option(
+    "--visuals <path>",
+    "Path to visual_analysis.json to enrich the prompt"
   )
   .action(async (filePath: string, options) => {
     try {
-      const mdPath =
-        typeof options.markdown === "string"
-          ? options.markdown
-          : options.markdown === true
-            ? "./summary.md"
-            : undefined;
-
-      const result = await summarize(filePath, {
+      const { prompt, schema } = buildPromptArtifacts(filePath, {
         metadataPath: options.metadata,
         visualsPath: options.visuals,
+        onProgress: (msg) => logger.info(msg),
+      });
+
+      const promptPath = resolve(options.output);
+      const schemaPath = resolve(options.schema);
+      writeFileSync(promptPath, prompt);
+      writeFileSync(schemaPath, JSON.stringify(schema, null, 2));
+
+      logger.success("Assembled summary prompt");
+      logger.keyValue("  Prompt", promptPath);
+      logger.keyValue("  Schema", schemaPath);
+      logger.info(
+        "Send the prompt to any model, then `scrub render` the JSON response."
+      );
+    } catch (error) {
+      logger.error((error as Error).message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("render")
+  .description(
+    "Render a model-produced summary JSON (matching the schema) into markdown"
+  )
+  .argument("<summary>", "Path to summary JSON")
+  .option("-o, --output <path>", "Output path for markdown", "./summary.md")
+  .option("--metadata <path>", "Path to metadata.json")
+  .option(
+    "--transcript <path>",
+    "Path to transcript.json to append a full transcript"
+  )
+  .action(async (summaryPath: string, options) => {
+    try {
+      const markdown = renderSummaryFile(summaryPath, {
+        metadataPath: options.metadata,
         transcriptPath: options.transcript,
-        outputMarkdown: !!mdPath,
-        outputSkill: options.skill || !!options.skillName,
-        skillName: options.skillName,
         onProgress: (msg) => logger.info(msg),
       });
 
       const outPath = resolve(options.output);
-      writeFileSync(outPath, JSON.stringify(result.summary, null, 2));
-      logger.success(`Summarized: ${result.summary.title}`);
+      writeFileSync(outPath, markdown);
+      logger.success("Rendered summary markdown");
       logger.keyValue("  Output", outPath);
-
-      if (result.markdown && mdPath) {
-        writeFileSync(resolve(mdPath), result.markdown);
-        logger.keyValue("  Markdown", mdPath);
-      }
-
-      if (result.skill) {
-        const skillPath = resolve(dirname(outPath), "SKILL.md");
-        writeFileSync(skillPath, result.skill.skillMd);
-        logger.keyValue("  Skill", skillPath);
-      }
     } catch (error) {
       logger.error((error as Error).message);
       process.exit(1);
@@ -410,13 +423,7 @@ program
     );
 
     logger.newline();
-    logger.info("API Keys:");
-    const anthropicLabel = !diag.anthropicKey
-      ? fmt.red("✗ missing")
-      : diag.anthropicAuth.ok
-        ? fmt.green("✓ authenticated")
-        : fmt.red(`✗ auth failed (${diag.anthropicAuth.error})`);
-    logger.keyValue("  Anthropic", anthropicLabel);
+    logger.info("API Keys (optional — for hosted transcription):");
     logger.keyValue(
       "  OpenAI",
       config.getApiKey("openai")
@@ -453,8 +460,6 @@ program
     const ready =
       diag.ytdlp &&
       diag.ffmpeg &&
-      diag.anthropicKey &&
-      diag.anthropicAuth.ok &&
       diag.transcribers.some((t) => t.available);
     if (ready) {
       logger.success("System is ready!");

@@ -1,10 +1,25 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
-import { scrubVideo, runCLI } from "../../helpers/cli-runner.js";
+import { scrubVideo } from "../../helpers/cli-runner.js";
 import { useVCR } from "../../helpers/vcr.js";
 import { getTestVideoId } from "../../helpers/fixtures.js";
 import { TEST_OUTPUT_DIR } from "../setup.js";
+
+/** Recursively find the first file with the given name under `dir`. */
+function findFile(dir: string, name: string): string | null {
+  if (!existsSync(dir)) return null;
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      const found = findFile(full, name);
+      if (found) return found;
+    } else if (entry === name) {
+      return full;
+    }
+  }
+  return null;
+}
 
 describe("CLI: Process Video E2E", () => {
   const testVideoId = getTestVideoId();
@@ -18,57 +33,35 @@ describe("CLI: Process Video E2E", () => {
     await vcr.afterEach();
   });
 
-  describe("scrub <video-url>", () => {
-    it("should process a video and generate markdown output", async () => {
+  describe("scrub youtube <video-url>", () => {
+    it("should process a video and emit the summary prompt + schema", async () => {
       const result = await scrubVideo(testVideoId, ["--no-visuals"]);
 
       expect(result.success).toBe(true);
 
-      // Check that output directory was created
-      const outputDir = join(TEST_OUTPUT_DIR, testVideoId, "output");
-      expect(existsSync(outputDir)).toBe(true);
+      // The deterministic pipeline emits prompt/summary.prompt.md + summary.schema.json
+      const promptPath = findFile(TEST_OUTPUT_DIR, "summary.prompt.md");
+      expect(promptPath).not.toBeNull();
 
-      // Check that summary.md was created
-      const summaryPath = join(outputDir, "summary.md");
-      expect(existsSync(summaryPath)).toBe(true);
+      const schemaPath = findFile(TEST_OUTPUT_DIR, "summary.schema.json");
+      expect(schemaPath).not.toBeNull();
 
-      // Verify markdown has content
-      const markdown = readFileSync(summaryPath, "utf-8");
-      expect(markdown.length).toBeGreaterThan(100);
-      expect(markdown).toContain("#"); // Has headers
+      // Prompt has real content (instructions + transcript)
+      const prompt = readFileSync(promptPath!, "utf-8");
+      expect(prompt.length).toBeGreaterThan(100);
+      expect(prompt).toContain("## CONTENT");
+
+      // Schema is valid JSON describing an object
+      const schema = JSON.parse(readFileSync(schemaPath!, "utf-8"));
+      expect(schema.type).toBe("object");
     }, 180000); // 3 minute timeout
 
-    it("should generate SKILL.md with --output-skill flag", async () => {
-      const result = await scrubVideo(testVideoId, [
-        "--no-visuals",
-        "--output-skill",
-      ]);
+    it("should not produce any LLM-derived artifacts (no summary.md / SKILL.md)", async () => {
+      const result = await scrubVideo(testVideoId, ["--no-visuals"]);
 
       expect(result.success).toBe(true);
-
-      // Check that SKILL.md was created
-      const outputDir = join(TEST_OUTPUT_DIR, testVideoId, "output");
-      const skillPath = join(outputDir, "SKILL.md");
-
-      // Note: SKILL.md may not be generated if skill generation fails
-      // but the main process should still succeed
-      if (existsSync(skillPath)) {
-        const skillContent = readFileSync(skillPath, "utf-8");
-        expect(skillContent).toContain("#"); // Has title
-      }
+      expect(findFile(TEST_OUTPUT_DIR, "SKILL.md")).toBeNull();
+      expect(findFile(TEST_OUTPUT_DIR, "summary.md")).toBeNull();
     }, 180000);
-  });
-
-  describe("--dry-run", () => {
-    it("should check prerequisites without processing", async () => {
-      const result = await runCLI([
-        `https://youtube.com/watch?v=${testVideoId}`,
-        "--dry-run",
-      ]);
-
-      // Dry run should succeed if prerequisites are met
-      expect(result.success).toBe(true);
-      expect(result.stdout).toContain("Ready to process");
-    }, 30000); // 30 second timeout for dry-run
   });
 });

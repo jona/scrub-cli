@@ -28,20 +28,12 @@ const TranscriptionConfigSchema = z.object({
 });
 
 /**
- * Schema for visual analysis configuration
+ * Schema for frame extraction configuration
  */
 const VisualConfigSchema = z.object({
   enabled: z.boolean().default(true),
   sceneThreshold: z.number().min(0).max(1).default(0.4),
   maxFrames: z.number().min(1).max(100).default(20),
-  model: z.string().default("claude-opus-4-6"),
-});
-
-/**
- * Schema for summarizer configuration
- */
-const SummarizerConfigSchema = z.object({
-  model: z.string().default("claude-opus-4-6"),
 });
 
 /**
@@ -71,7 +63,6 @@ const LocalWhisperConfigSchema = z.object({
  * Schema for API keys configuration
  */
 const ApiKeysSchema = z.object({
-  anthropic: z.string().optional(),
   openai: z.string().optional(),
   deepgram: z.string().optional(),
 });
@@ -82,7 +73,6 @@ const ApiKeysSchema = z.object({
 const ConfigSchema = z.object({
   transcription: TranscriptionConfigSchema.default({}),
   visual: VisualConfigSchema.default({}),
-  summarizer: SummarizerConfigSchema.default({}),
   output: OutputConfigSchema.default({}),
   cache: CacheConfigSchema.default({}),
   localWhisper: LocalWhisperConfigSchema.default({}),
@@ -92,7 +82,6 @@ const ConfigSchema = z.object({
 export type Config = z.infer<typeof ConfigSchema>;
 export type TranscriptionConfig = z.infer<typeof TranscriptionConfigSchema>;
 export type VisualConfig = z.infer<typeof VisualConfigSchema>;
-export type SummarizerConfig = z.infer<typeof SummarizerConfigSchema>;
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 export type CacheConfig = z.infer<typeof CacheConfigSchema>;
 export type LocalWhisperConfig = z.infer<typeof LocalWhisperConfigSchema>;
@@ -110,10 +99,6 @@ const DEFAULT_CONFIG: Config = {
     enabled: true,
     sceneThreshold: 0.4,
     maxFrames: 20,
-    model: "claude-opus-4-6",
-  },
-  summarizer: {
-    model: "claude-opus-4-6",
   },
   output: {
     directory: "~/.scrub/docs",
@@ -203,17 +188,10 @@ class ConfigManager {
   }
 
   /**
-   * Get visual analysis configuration
+   * Get frame extraction configuration
    */
   getVisual(): VisualConfig {
     return this.config.visual;
-  }
-
-  /**
-   * Get summarizer configuration
-   */
-  getSummarizer(): SummarizerConfig {
-    return this.config.summarizer;
   }
 
   /**
@@ -240,15 +218,8 @@ class ConfigManager {
   /**
    * Get API key for a service
    */
-  getApiKey(service: "anthropic" | "openai" | "deepgram"): string | undefined {
+  getApiKey(service: "openai" | "deepgram"): string | undefined {
     return this.config.apis[service];
-  }
-
-  /**
-   * Check if Anthropic API key is configured
-   */
-  hasAnthropicKey(): boolean {
-    return !!this.config.apis.anthropic;
   }
 
   /**

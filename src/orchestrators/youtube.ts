@@ -1,8 +1,10 @@
 /**
  * youtube — Orchestrator for processing YouTube videos and playlists
  *
- * Chains: download → transcribe → analyzeVisuals → summarize
+ * Chains: download → transcribe → extractFrames → emit prompt artifacts
  * Manages artifact storage, caching, progress callbacks, and playlist iteration.
+ * Fully deterministic — no model is called. An agent harness consumes the emitted
+ * prompt + schema to produce a summary.
  */
 
 import { config } from "../infrastructure/Config.js";
@@ -15,14 +17,12 @@ import {
   isFfmpegAvailable,
 } from "../core/download.js";
 import { transcribe, getTranscriberDiagnostics } from "../core/transcribe.js";
-import { analyzeVisuals } from "../core/analyze-visuals.js";
-import { summarize } from "../core/summarize.js";
+import { extractFrames } from "../core/extract-frames.js";
+import { buildPromptArtifacts } from "../core/prompt.js";
 import { artifactStore } from "../services/ArtifactStore.js";
 import { playlistExtractor } from "../services/PlaylistExtractor.js";
 import type {
-  VisualAnalysis,
-  SummaryResult,
-  SkillGenerationResult,
+  SceneFrame,
   SourcePlaylist,
   PlaylistEntry,
   PlaylistVideoStatus,
@@ -40,8 +40,6 @@ export interface YouTubeProcessOptions {
   transcriber?: TranscriptionSource;
   sceneThreshold?: number;
   maxFrames?: number;
-  generateSkill?: boolean;
-  skillName?: string;
   verbose?: boolean;
   sourcePlaylist?: SourcePlaylist;
   onProgress?: (progress: {
@@ -54,18 +52,16 @@ export interface YouTubeProcessOptions {
 export interface ProcessResult {
   metadata: MediaMetadata;
   transcript: TranscriptionResult;
-  visuals: VisualAnalysis[];
-  summary: SummaryResult;
-  markdown: string;
+  frames: SceneFrame[];
+  /** Path to the emitted summary.prompt.md */
+  promptPath: string;
+  /** Primary output path (the assembled prompt) */
   outputPath: string;
-  skillPath?: string;
-  skillResult?: SkillGenerationResult;
   stats: {
     downloadTime: number;
     transcriptionTime: number;
-    visualAnalysisTime: number;
-    summarizationTime: number;
-    skillGenerationTime?: number;
+    frameExtractionTime: number;
+    promptTime: number;
     totalTime: number;
   };
 }
@@ -97,8 +93,8 @@ export async function processYouTube(
   const stats: ProcessResult["stats"] = {
     downloadTime: 0,
     transcriptionTime: 0,
-    visualAnalysisTime: 0,
-    summarizationTime: 0,
+    frameExtractionTime: 0,
+    promptTime: 0,
     totalTime: 0,
   };
 
@@ -160,32 +156,31 @@ export async function processYouTube(
       artifactStore.saveTranscription(contentId, transcript);
     }
 
-    // Step 3: Visual analysis
-    let visuals: VisualAnalysis[] = [];
+    // Step 3: Extract key frames (deterministic; vision is the harness's job)
+    let frames: SceneFrame[] = [];
     if (!skipVisuals && downloadResult.videoPath) {
-      progress("scene-detect", 3, 5, "Detecting scenes...");
-      const visualStart = Date.now();
+      progress("extract-frames", 3, 4, "Extracting key frames...");
+      const framesStart = Date.now();
 
       const framesDir = artifactStore.getFramesDir(contentId);
-      visuals = await analyzeVisuals(downloadResult.videoPath, {
+      frames = await extractFrames(downloadResult.videoPath, {
         outputDir: framesDir,
         threshold: options.sceneThreshold,
         maxFrames: options.maxFrames,
-        onProgress: (msg) => progress("visual-analyze", 3, 5, msg),
+        onProgress: (msg) => progress("extract-frames", 3, 4, msg),
       });
 
-      stats.visualAnalysisTime = Date.now() - visualStart;
+      stats.frameExtractionTime = Date.now() - framesStart;
 
-      if (visuals.length > 0) {
-        artifactStore.saveVisualAnalysis(contentId, visuals);
+      if (frames.length > 0) {
+        artifactStore.saveFramesManifest(contentId, frames);
       }
     }
 
-    // Step 4: Summarize
-    progress("summarize", 4, 5, "Generating summary...");
-    const summarizeStart = Date.now();
+    // Step 4: Assemble the summary prompt + output schema
+    progress("prompt", 4, 4, "Assembling summary prompt...");
+    const promptStart = Date.now();
 
-    // Write transcript to temp file for summarize primitive
     const transcriptPath = artifactStore.getArtifactPath(
       contentId,
       "transcription/json"
@@ -194,43 +189,15 @@ export async function processYouTube(
       contentId,
       "source/metadata"
     );
-    const visualsPath = artifactStore.getArtifactPath(
-      contentId,
-      "inference/visual_analysis"
-    );
 
-    const summarizeResult = await summarize(transcriptPath, {
+    const { prompt, schema } = buildPromptArtifacts(transcriptPath, {
       metadataPath,
-      visualsPath: visuals.length > 0 ? visualsPath : undefined,
-      outputMarkdown: true,
-      outputSkill: options.generateSkill,
-      skillName: options.skillName,
-      transcriptPath,
-      onProgress: (msg) => progress("summarize", 4, 5, msg),
+      onProgress: (msg) => progress("prompt", 4, 4, msg),
     });
 
-    stats.summarizationTime = Date.now() - summarizeStart;
+    const promptPath = artifactStore.savePrompt(contentId, prompt, schema);
 
-    // Save artifacts
-    artifactStore.saveSummary(contentId, summarizeResult.summary);
-    const outputPath = artifactStore.saveMarkdown(
-      contentId,
-      summarizeResult.markdown!
-    );
-
-    let skillPath: string | undefined;
-    if (summarizeResult.skill) {
-      skillPath = artifactStore.saveSkill(
-        contentId,
-        summarizeResult.skill.skillMd
-      );
-      artifactStore.saveSkillChecklist(
-        contentId,
-        summarizeResult.skill.checklist
-      );
-      stats.skillGenerationTime = 0; // included in summarization time
-    }
-
+    stats.promptTime = Date.now() - promptStart;
     stats.totalTime = Date.now() - startTime;
 
     // Finalize
@@ -245,12 +212,9 @@ export async function processYouTube(
     return {
       metadata: downloadResult.metadata,
       transcript,
-      visuals,
-      summary: summarizeResult.summary,
-      markdown: summarizeResult.markdown!,
-      outputPath,
-      skillPath,
-      skillResult: summarizeResult.skill,
+      frames,
+      promptPath,
+      outputPath: promptPath,
       stats,
     };
   } catch (error) {
@@ -298,7 +262,7 @@ export async function processYouTubePlaylist(
       status.status = "skipped";
       status.outputPath = artifactStore.getArtifactPath(
         entry.contentId,
-        "output/markdown"
+        "prompt/summary"
       );
       onProgress?.(entry.contentId, "skipped");
       return;
@@ -385,11 +349,6 @@ export async function checkYouTubePrerequisites(): Promise<{
   if (!(await isFfmpegAvailable())) {
     missing.push("ffmpeg (required for audio/video processing)");
   }
-  if (!config.hasAnthropicKey()) {
-    missing.push(
-      "Anthropic API key in ~/.scrub/config.json (required for summarization)"
-    );
-  }
 
   const transcribers = await getTranscriberDiagnostics();
   const available = transcribers.filter((t) => t.available);
@@ -405,35 +364,13 @@ export async function checkYouTubePrerequisites(): Promise<{
  */
 export async function getDiagnostics() {
   const transcribers = await getTranscriberDiagnostics();
-  const anthropicKey = config.hasAnthropicKey();
   return {
     ytdlp: await isYtDlpAvailable(),
     ffmpeg: await isFfmpegAvailable(),
-    anthropicKey,
-    anthropicAuth: anthropicKey ? await pingAnthropic() : { ok: false as const, error: "no key" },
     transcribers: transcribers.map((t) => ({
       source: t.source,
       name: t.name,
       available: t.available,
     })),
   };
-}
-
-async function pingAnthropic(): Promise<{ ok: true } | { ok: false; error: string }> {
-  const apiKey = config.getApiKey("anthropic");
-  if (!apiKey) return { ok: false, error: "no key" };
-  try {
-    const { default: Anthropic } = await import("@anthropic-ai/sdk");
-    const client = new Anthropic({ apiKey, maxRetries: 0, timeout: 10000 });
-    await client.messages.create({
-      model: config.getSummarizer().model,
-      max_tokens: 1,
-      messages: [{ role: "user", content: "hi" }],
-    });
-    return { ok: true };
-  } catch (err) {
-    const e = err as { status?: number; message?: string };
-    const status = e?.status ? `${e.status} ` : "";
-    return { ok: false, error: `${status}${e?.message ?? String(err)}` };
-  }
 }

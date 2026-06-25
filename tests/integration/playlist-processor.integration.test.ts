@@ -4,7 +4,6 @@ import type {
   PlaylistEntry,
   PlaylistMetadata,
   PlaylistVideoStatusType,
-  SummaryResult,
 } from "../../src/types/index.js";
 import type { TranscriptionResult } from "../../src/transcription/ITranscriber.js";
 
@@ -50,34 +49,6 @@ const transcript: TranscriptionResult = {
   source: "youtube-captions",
 };
 
-const summary: SummaryResult = {
-  title: "Test Video",
-  tldr: "TypeScript overview.",
-  overview: "Introduction to TypeScript.",
-  thesisAndClaims: { thesis: "", keyClaims: [] },
-  actionableInsights: [],
-  concepts: [],
-  mentalModels: [],
-  structureMap: [],
-  openQuestions: [],
-  notableQuotes: [],
-  biasAnalysis: { perspective: "", possibleBiases: [], blindSpots: [] },
-  knowledgeGraph: {
-    topics: [],
-    people: [],
-    tools: [],
-    technologies: [],
-    relationships: [],
-  },
-  difficulty: { level: "beginner", prerequisites: [], targetAudience: "" },
-  reusabilityPrompts: {},
-  confidence: { level: "high", reasoning: "" },
-  sections: [],
-  keyTakeaways: [],
-  codeSnippets: [],
-  references: [],
-};
-
 vi.mock("../../src/services/PlaylistExtractor.js", () => ({
   playlistExtractor: {
     extract: vi.fn(),
@@ -96,12 +67,12 @@ vi.mock("../../src/core/transcribe.js", () => ({
   getTranscriberDiagnostics: vi.fn(),
 }));
 
-vi.mock("../../src/core/analyze-visuals.js", () => ({
-  analyzeVisuals: vi.fn(),
+vi.mock("../../src/core/extract-frames.js", () => ({
+  extractFrames: vi.fn(),
 }));
 
-vi.mock("../../src/core/summarize.js", () => ({
-  summarize: vi.fn(),
+vi.mock("../../src/core/prompt.js", () => ({
+  buildPromptArtifacts: vi.fn(),
 }));
 
 vi.mock("../../src/services/ArtifactStore.js", () => ({
@@ -113,11 +84,8 @@ vi.mock("../../src/services/ArtifactStore.js", () => ({
     saveMetadata: vi.fn(),
     loadTranscription: vi.fn(),
     saveTranscription: vi.fn(),
-    saveVisualAnalysis: vi.fn(),
-    saveSummary: vi.fn(),
-    saveMarkdown: vi.fn(),
-    saveSkill: vi.fn(),
-    saveSkillChecklist: vi.fn(),
+    saveFramesManifest: vi.fn(),
+    savePrompt: vi.fn(),
     finalizeArtifacts: vi.fn(),
     hasVideo: vi.fn(),
   },
@@ -125,7 +93,6 @@ vi.mock("../../src/services/ArtifactStore.js", () => ({
 
 vi.mock("../../src/infrastructure/Config.js", () => ({
   config: {
-    hasAnthropicKey: vi.fn(),
     getApiKey: vi.fn(),
     getVisual: vi.fn(),
     getOutput: vi.fn(),
@@ -144,7 +111,7 @@ import {
   getTranscriberDiagnostics,
   transcribe,
 } from "../../src/core/transcribe.js";
-import { summarize } from "../../src/core/summarize.js";
+import { buildPromptArtifacts } from "../../src/core/prompt.js";
 import { artifactStore } from "../../src/services/ArtifactStore.js";
 import { config } from "../../src/infrastructure/Config.js";
 
@@ -167,12 +134,10 @@ function metadataFor(contentId: string, url: string): MediaMetadata {
 function resetMocks(): void {
   vi.clearAllMocks();
 
-  vi.mocked(config.hasAnthropicKey).mockReturnValue(true);
   vi.mocked(config.getVisual).mockReturnValue({
     enabled: false,
     sceneThreshold: 0.4,
     maxFrames: 20,
-    model: "claude-opus-4-6",
   });
   vi.mocked(config.getOutput).mockReturnValue({
     directory: "./output",
@@ -211,10 +176,13 @@ function resetMocks(): void {
 
   vi.mocked(transcribe).mockResolvedValue(transcript);
   vi.mocked(getTranscriberDiagnostics).mockResolvedValue([]);
-  vi.mocked(summarize).mockResolvedValue({
-    summary,
-    markdown: "# Test",
-  });
+  vi.mocked(buildPromptArtifacts).mockImplementation(
+    (_filePath: string) => ({
+      prompt: "PROMPT",
+      schema: { type: "object" } as never,
+      metadata: metadataFor(FIRST_VIDEO_ID, firstVideoUrl),
+    })
+  );
 
   vi.mocked(artifactStore.getSourceDir).mockImplementation(
     (contentId: string) => `/tmp/source/${contentId}`
@@ -226,8 +194,8 @@ function resetMocks(): void {
     (contentId: string, type: string) => `/tmp/output/${contentId}/${type}`
   );
   vi.mocked(artifactStore.loadTranscription).mockReturnValue(null);
-  vi.mocked(artifactStore.saveMarkdown).mockImplementation(
-    (contentId: string) => `/tmp/output/${contentId}/summary.md`
+  vi.mocked(artifactStore.savePrompt).mockImplementation(
+    (contentId: string) => `/tmp/output/${contentId}/summary.prompt.md`
   );
   vi.mocked(artifactStore.hasVideo).mockReturnValue(false);
 }
@@ -282,7 +250,7 @@ describe("Playlist Orchestrator Integration", () => {
         contentId: FIRST_VIDEO_ID,
         title: "TypeScript Introduction",
         status: "completed",
-        outputPath: `/tmp/output/${FIRST_VIDEO_ID}/summary.md`,
+        outputPath: `/tmp/output/${FIRST_VIDEO_ID}/summary.prompt.md`,
       })
     );
   });
@@ -325,7 +293,7 @@ describe("Playlist Orchestrator Integration", () => {
       expect.objectContaining({
         contentId: FIRST_VIDEO_ID,
         status: "skipped",
-        outputPath: `/tmp/output/${FIRST_VIDEO_ID}/output/markdown`,
+        outputPath: `/tmp/output/${FIRST_VIDEO_ID}/prompt/summary`,
       })
     );
     expect(download).not.toHaveBeenCalled();
