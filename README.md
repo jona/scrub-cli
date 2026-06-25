@@ -2,7 +2,7 @@
 
 ![Scrub Banner](https://www.scrb.dev/og-banner.jpg)
 
-Turn YouTube videos and local audio/video files into comprehensive summaries and Agent Skills in seconds. Perfect for quickly reviewing educational content, creating reference documentation, building a personal knowledge base, and generating reusable skills for AI agents.
+Turn YouTube videos and local audio/video files into **deterministic, model-agnostic knowledge artifacts** in seconds. Scrub does the deterministic work — download, transcribe, extract key frames, and assemble a ready-to-send summary prompt — and emits artifacts. An agent harness (Claude Code, another CLI, your own app) takes those artifacts and runs whatever model it wants. **Scrub calls no LLM and has no model dependency.**
 
 ## Features
 
@@ -13,22 +13,15 @@ Turn YouTube videos and local audio/video files into comprehensive summaries and
   - Deepgram API - enterprise-grade
   - YouTube Captions - fallback when no transcription available
 
-- **Visual Analysis**: Intelligent scene detection captures key frames
+- **Frame Extraction**: Intelligent scene detection captures key frames
   - Smart scene change detection (not periodic snapshots)
-  - Claude Vision API analyzes slides, code, diagrams
-  - Extracts text/code from visual content
+  - Emits frames + a `frames.json` manifest of timestamps
+  - A harness can run its own vision model over the frames
 
-- **AI Summarization**: Structured markdown output
-  - Section-by-section breakdown with timestamps
-  - Key takeaways and bullet points
-  - Code snippet extraction and consolidation
-  - References and resource links
-  - Comprehensive analysis (thesis, claims, mental models, bias analysis)
-
-- **Skill Generation**: Create Agent Skills from video content
-  - Generate SKILL.md files for AI agent consumption
-  - Includes examples, workflows, and templates
-  - Skill checklist to assess coverage
+- **Prompt Assembly**: The deterministic half of summarization, model-free
+  - Builds a `summary.prompt.md` with the transcript, metadata, and visuals interpolated
+  - Emits a `summary.schema.json` describing the expected JSON output
+  - `scrub render` turns a model's JSON response back into polished markdown
 
 - **Playlist Support**: Process entire YouTube playlists
   - Configurable concurrency for parallel processing
@@ -36,12 +29,12 @@ Turn YouTube videos and local audio/video files into comprehensive summaries and
   - Limit number of videos to process
 
 - **Local Media**: Process `.mp3` and `.mp4` files via `scrub file`
-  - Visual analysis skipped automatically for audio-only files
+  - Frame extraction skipped automatically for audio-only files
 
-- **Composable CLI**: Run the full pipeline or individual steps (`download`, `prepare`, `transcribe`, `analyze-visuals`, `summarize`)
+- **Composable CLI**: Run the full pipeline or individual steps (`download`, `prepare`, `transcribe`, `extract-frames`, `prompt`, `render`)
 
 - **Artifact Caching**: Smart caching system
-  - Caches transcriptions, summaries, and visual analysis
+  - Caches transcriptions and frames
   - Reuses cached data for faster reprocessing
 
 ## Prerequisites
@@ -74,23 +67,17 @@ Turn YouTube videos and local audio/video files into comprehensive summaries and
    sudo apt install ffmpeg
    ```
 
-4. **User config** at `~/.scrub/config.json` (Anthropic API key required for summarization and vision)
+4. **User config** at `~/.scrub/config.json` (optional)
+
+   No API key is required — scrub calls no LLM. A config file is only needed to
+   set a hosted transcription key (OpenAI/Deepgram) or tweak defaults. Local
+   transcription (whisper.cpp / faster-whisper) needs no key at all.
 
    ```bash
    mkdir -p ~/.scrub
    ```
 
-   Create `~/.scrub/config.json` with at least:
-
-   ```json
-   {
-     "apis": {
-       "anthropic": "sk-ant-your-key-here"
-     }
-   }
-   ```
-
-   Run `scrub doctor` to verify tools, API keys, and transcription adapters.
+   Run `scrub doctor` to verify tools and transcription adapters.
 
 ### Optional (for local transcription)
 
@@ -163,11 +150,7 @@ Default output directory is `~/.scrub/docs`. Artifacts are stored in slugified s
   "visual": {
     "enabled": true,
     "sceneThreshold": 0.4,
-    "maxFrames": 20,
-    "model": "claude-opus-4-6"
-  },
-  "summarizer": {
-    "model": "claude-opus-4-6"
+    "maxFrames": 20
   },
   "output": {
     "directory": "~/.scrub/docs",
@@ -181,7 +164,6 @@ Default output directory is `~/.scrub/docs`. Artifacts are stored in slugified s
     "modelsPath": "/path/to/whisper.cpp/models"
   },
   "apis": {
-    "anthropic": "sk-ant-...",
     "openai": "sk-...",
     "deepgram": "..."
   }
@@ -211,17 +193,15 @@ npm run dev -- youtube https://www.youtube.com/watch?v=VIDEO_ID
 |------|-------------|
 | `-o, --output-dir <path>` | Override artifact/output directory |
 | `-t, --transcriber <name>` | Force adapter (`local-whisper`, `faster-whisper`, `openai`, `deepgram`, `youtube-captions`) |
-| `--no-visuals` | Skip visual analysis |
+| `--no-visuals` | Skip frame extraction |
 | `--scene-threshold <n>` | Scene detection sensitivity (default: 0.4) |
-| `--max-frames <n>` | Max frames to analyze (default: 20) |
-| `--skill` | Generate `SKILL.md` alongside markdown output |
-| `--skill-name <name>` | Custom skill name |
+| `--max-frames <n>` | Max frames to extract (default: 20) |
 | `-v, --verbose` | Detailed progress |
 | `--max-videos <n>` | Limit playlist videos processed |
 | `--parallel <n>` | Concurrent playlist jobs (default: 1) |
 | `--no-skip-existing` | Reprocess cached videos |
 
-**`scrub file <path>`** supports the same flags except playlist options. Visual analysis is skipped for `.mp3`.
+**`scrub file <path>`** supports the same flags except playlist options. Frame extraction is skipped for `.mp3`.
 
 ### Examples
 
@@ -232,14 +212,11 @@ scrub youtube https://www.youtube.com/watch?v=dQw4w9WgXcQ
 # Custom output directory
 scrub youtube https://youtu.be/abc123 -o ./notes
 
-# Skip visual analysis (faster, cheaper)
+# Skip frame extraction (faster)
 scrub youtube https://youtube.com/watch?v=xyz --no-visuals
 
 # Force OpenAI transcription
 scrub youtube https://youtube.com/watch?v=xyz -t openai
-
-# Generate an Agent Skill
-scrub youtube https://youtube.com/watch?v=xyz --skill --skill-name react-hooks
 
 # Playlist: first 5 videos, 2 in parallel
 scrub youtube https://youtube.com/playlist?list=PLxyz --max-videos 5 --parallel 2
@@ -248,7 +225,7 @@ scrub youtube https://youtube.com/playlist?list=PLxyz --max-videos 5 --parallel 
 scrub youtube https://youtube.com/playlist?list=PLxyz --no-skip-existing
 
 # Local file
-scrub file ./podcast.mp3 --skill
+scrub file ./podcast.mp3
 ```
 
 ### Primitives (pipeline steps)
@@ -259,16 +236,32 @@ Run individual steps for scripting or debugging:
 scrub download <youtube-url> [-o ./download] [--no-video]
 scrub prepare <local.mp3|mp4> [-o ./prepare] [--no-video]
 scrub transcribe <audio.wav> [-o ./transcript.json] [-t openai] [--text]
-scrub analyze-visuals <video.mp4> [-o ./visual_analysis.json]
-scrub summarize <file> [-o ./summary.json] [--markdown] [--skill] [--metadata path] [--visuals path]
+scrub extract-frames <video.mp4> [-o ./frames.json] [--output-dir ./frames]
+scrub prompt <file> [-o ./summary.prompt.md] [--schema ./summary.schema.json] [--metadata path] [--visuals path]
+scrub render <summary.json> [-o ./summary.md] [--metadata path] [--transcript path]
 ```
 
-`summarize` accepts `.json` transcripts, plain `.txt`, `.md`, and other text sources.
+`prompt` accepts `.json` transcripts, plain `.txt`, `.md`, and other text sources, and
+emits the assembled prompt + output schema. Send the prompt to any model, then
+`scrub render` the model's JSON response into markdown.
+
+### Agent harness round-trip
+
+```bash
+# 1. Scrub does the deterministic work
+scrub youtube https://youtube.com/watch?v=xyz -o ./out
+
+# 2. The harness sends the assembled prompt to whatever model it wants
+cat ./out/<slug>/prompt/summary.prompt.md | <your-model> > ./out/<slug>/inference/summary.json
+
+# 3. Scrub renders the model's JSON back into polished markdown
+scrub render ./out/<slug>/inference/summary.json -o ./out/<slug>/output/summary.md
+```
 
 ### Diagnostic commands
 
 ```bash
-# Check tools, config path, API keys (pings Anthropic when configured), adapters
+# Check tools, config path, optional transcription keys, and adapters
 scrub doctor
 
 # List transcription adapters and availability
@@ -279,7 +272,7 @@ scrub transcribers
 
 ## Output Format
 
-Generated markdown files include:
+`scrub render` turns a model's summary JSON into markdown files that include:
 
 ````markdown
 # Video Title
@@ -340,15 +333,19 @@ _Generated by [Scrub](https://github.com/yourusername/scrub) on 2026-01-20T12:00
 
 ## Cost Estimates
 
-| Component | 10-min video | 30-min video |
-|-----------|--------------|--------------|
-| Video download | Free | Free |
-| Local transcription | Free | Free |
-| Claude Vision (~15 frames) | ~$0.07 | ~$0.15 |
-| Claude summarization | ~$0.05 | ~$0.10 |
-| **Total** | **~$0.12** | **~$0.25** |
+Scrub itself calls **no LLM**, so the tool has no model cost. Its only optional
+cost is hosted transcription:
 
-*Costs are approximate and depend on video complexity.*
+| Component | Cost |
+|-----------|------|
+| Video download | Free |
+| Local transcription (whisper.cpp / faster-whisper) | Free |
+| Hosted transcription (OpenAI / Deepgram) | ~$0.006–0.007/min |
+| Frame extraction (ffmpeg) | Free |
+| Prompt assembly | Free |
+
+Summarization and vision are the **agent harness's** responsibility — their cost
+depends on the model the harness chooses to run against the emitted prompt/frames.
 
 ## Transcription Adapters
 
@@ -392,16 +389,6 @@ Install at least one transcription option:
 - faster-whisper (`pip install faster-whisper`)
 - Add `apis.openai` to `~/.scrub/config.json` for cloud transcription
 
-### "Anthropic API key not configured"
-
-```bash
-# Create the user config directory
-mkdir -p ~/.scrub
-
-# Edit ~/.scrub/config.json and set:
-# { "apis": { "anthropic": "sk-ant-your-key-here" } }
-```
-
 ### Video download fails
 
 - Check if the video is age-restricted or private
@@ -418,12 +405,14 @@ src/
     youtube.ts           # YouTube video / playlist processing
     file.ts              # Local .mp3 / .mp4 processing
 
-  core/                  # Pure pipeline primitives
+  core/                  # Pure pipeline primitives (no LLM)
     download.ts          # yt-dlp download + metadata
     prepare.ts           # Local file audio extraction + metadata
     transcribe.ts        # Transcription entrypoint
-    analyze-visuals.ts   # Scene detection + Claude Vision
-    summarize.ts         # Summarization, markdown, and skill generation
+    extract-frames.ts    # Scene detection + ffmpeg frame extraction
+    summary-template.ts  # buildSummaryPrompt + SUMMARY_SCHEMA + renderSummaryMarkdown
+    prompt.ts            # Assemble summary.prompt.md + summary.schema.json
+    render.ts            # Render a model's summary JSON into markdown
 
   services/              # Shared domain services
     ArtifactStore.ts     # Slug-based artifact layout and caching
@@ -469,4 +458,4 @@ MIT
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - Video downloading
 - [whisper.cpp](https://github.com/ggerganov/whisper.cpp) - Local speech recognition
 - [faster-whisper](https://github.com/guillaumekln/faster-whisper) - Optimized Whisper
-- [Anthropic Claude](https://www.anthropic.com/) - AI summarization and vision
+- [ffmpeg](https://ffmpeg.org/) - Audio/video processing and frame extraction
