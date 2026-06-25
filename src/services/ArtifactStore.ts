@@ -170,7 +170,11 @@ export class ArtifactStore {
   }
 
   /**
-   * Ensure all directories exist for a video
+   * Ensure the directories scrub's deterministic pipeline writes to exist.
+   *
+   * The `inference/` and `output/` directories are NOT created here — they hold
+   * harness-produced (model) output and rendered markdown, so they're created on
+   * demand by whoever writes them (`render`, or a harness), never left empty.
    */
   ensureVideoDirectories(contentId: string, title?: string): void {
     const dirs = [
@@ -179,8 +183,6 @@ export class ArtifactStore {
       this.getFramesDir(contentId),
       this.getTranscriptionDir(contentId),
       this.getPromptDir(contentId),
-      this.getInferenceDir(contentId),
-      this.getOutputSubdir(contentId),
     ];
 
     for (const dir of dirs) {
@@ -290,8 +292,8 @@ export class ArtifactStore {
    * Save summary result
    */
   saveSummary(contentId: string, summary: SummaryResult): void {
-    this.ensureVideoDirectories(contentId);
     const path = this.getArtifactPath(contentId, "inference/summary");
+    mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(summary, null, 2), "utf-8");
     logger.debug(`Saved summary to ${path}`);
   }
@@ -309,8 +311,8 @@ export class ArtifactStore {
    * Save visual analysis results
    */
   saveVisualAnalysis(contentId: string, visuals: VisualAnalysis[]): void {
-    this.ensureVideoDirectories(contentId);
     const path = this.getArtifactPath(contentId, "inference/visual_analysis");
+    mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(visuals, null, 2), "utf-8");
     logger.debug(`Saved visual analysis to ${path}`);
   }
@@ -358,8 +360,8 @@ export class ArtifactStore {
    * Save markdown output
    */
   saveMarkdown(contentId: string, markdown: string): string {
-    this.ensureVideoDirectories(contentId);
     const path = this.getArtifactPath(contentId, "output/markdown");
+    mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, markdown, "utf-8");
     logger.debug(`Saved markdown to ${path}`);
     return path;
