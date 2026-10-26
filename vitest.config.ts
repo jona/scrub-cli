@@ -1,7 +1,10 @@
 import { defineConfig } from "vitest/config";
 import { resolve } from "path";
 
-const includeE2E = process.argv.includes("--include-e2e");
+// e2e tests are opt-in via INCLUDE_E2E=1 (they drive real yt-dlp/ffmpeg + network).
+// Must be an env var, not a `--include-e2e` argv flag: vitest v4's CLI parser
+// rejects unknown flags before this config is evaluated.
+const includeE2E = !!process.env.INCLUDE_E2E;
 
 export default defineConfig({
   test: {
