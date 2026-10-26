@@ -17,6 +17,7 @@
   "type": "module",
   "scripts": {
     "prebuild": "npm run clean",
+    "postbuild": "chmod +x dist/entrypoints/cli/index.js",
     "build": "tsc",
     "start": "node dist/entrypoints/cli/index.js",
     "dev": "tsx src/entrypoints/cli/index.ts",
