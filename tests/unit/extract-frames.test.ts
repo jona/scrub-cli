@@ -1,0 +1,41 @@
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+vi.mock("../../src/utils/helpers.js", () => ({
+  commandExists: vi.fn(),
+  runCommand: vi.fn(),
+}));
+
+vi.mock("../../src/infrastructure/Config.js", () => ({
+  config: {
+    getVisual: vi.fn(() => ({
+      enabled: true,
+      sceneThreshold: 0.4,
+      maxFrames: 20,
+    })),
+  },
+}));
+
+import { extractFrames } from "../../src/core/extract-frames.js";
+import { commandExists } from "../../src/utils/helpers.js";
+
+describe("extractFrames guard clauses", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("rejects when ffmpeg is not installed", async () => {
+    vi.mocked(commandExists).mockResolvedValue(false);
+
+    await expect(
+      extractFrames("/some/video.mp4", { outputDir: "/tmp/frames-x" })
+    ).rejects.toThrow("ffmpeg is not installed");
+  });
+
+  it("rejects when the video file does not exist", async () => {
+    vi.mocked(commandExists).mockResolvedValue(true);
+
+    await expect(
+      extractFrames("/definitely/not/here.mp4", { outputDir: "/tmp/frames-x" })
+    ).rejects.toThrow("Video file not found");
+  });
+});
