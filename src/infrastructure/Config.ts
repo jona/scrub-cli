@@ -64,6 +64,7 @@ const LocalWhisperConfigSchema = z.object({
  */
 const ApiKeysSchema = z.object({
   openai: z.string().optional(),
+  anthropic: z.string().optional(),
   deepgram: z.string().optional(),
 });
 
@@ -71,12 +72,12 @@ const ApiKeysSchema = z.object({
  * Complete configuration schema
  */
 const ConfigSchema = z.object({
-  transcription: TranscriptionConfigSchema.default({}),
-  visual: VisualConfigSchema.default({}),
-  output: OutputConfigSchema.default({}),
-  cache: CacheConfigSchema.default({}),
-  localWhisper: LocalWhisperConfigSchema.default({}),
-  apis: ApiKeysSchema.default({}),
+  transcription: TranscriptionConfigSchema.prefault({}),
+  visual: VisualConfigSchema.prefault({}),
+  output: OutputConfigSchema.prefault({}),
+  cache: CacheConfigSchema.prefault({}),
+  localWhisper: LocalWhisperConfigSchema.prefault({}),
+  apis: ApiKeysSchema.prefault({}),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -218,7 +219,7 @@ class ConfigManager {
   /**
    * Get API key for a service
    */
-  getApiKey(service: "openai" | "deepgram"): string | undefined {
+  getApiKey(service: "openai" | "deepgram" | "anthropic"): string | undefined {
     return this.config.apis[service];
   }
 
