@@ -58,7 +58,7 @@ export async function createNativeCliFixture() {
     }else{
       const id=url.searchParams.get('v');
       if(id==='${UNAVAILABLE_VIDEO}'){process.stderr.write('Fixture video unavailable');process.exit(1);}
-      if(args.includes('--dump-json'))process.stdout.write(JSON.stringify({id,title:id==='${FIRST_VIDEO}'?'First Video':'Second Video',description:'Fixture description',duration:30,thumbnail:'',channel:'Fixture Channel',upload_date:'20260101',webpage_url:url.href}));
+      if(args.includes('--print'))process.stdout.write(JSON.stringify({title:id==='${FIRST_VIDEO}'?'First Video':'Second Video',description:'Fixture description',duration:30,thumbnail:'',channel:'Fixture Channel',upload_date:'20260101'}));
       else fs.writeFileSync(option('-o'),(args.includes('-x')?'fixture audio ':'fixture video ')+id);
     }
   `

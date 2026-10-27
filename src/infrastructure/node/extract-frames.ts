@@ -154,7 +154,7 @@ async function detectAndExtractFrames(
           : ["-fs", String(operation.maxArtifactBytes)]),
         framePath,
       ],
-      operation
+      { ...operation, stdoutMode: "tail" }
     );
 
     if (result.code === 0 && existsSync(framePath)) {
@@ -207,6 +207,30 @@ async function detectSceneTimestamps(
   operation: NativeOperationOptions
 ): Promise<number[]> {
   const run = operation.runtime?.runCommand ?? runCommand;
+  const timestamps: number[] = [];
+  let pending = "";
+  let streamed = false;
+  const receive = (text: string) => {
+    streamed = true;
+    if (timestamps.length >= maxFrames) return;
+    // stderr is a diagnostic tail. Consume scene timestamps as they arrive so
+    // long ffmpeg runs cannot discard early frames. Only retain a partial token.
+    const input = pending + text;
+    const pattern = /pts_time:(\d+(?:\.\d+)?)(?=\s)/g;
+    let consumed = 0;
+    for (const match of input.matchAll(pattern)) {
+      consumed = match.index + match[0].length;
+      const timestamp = Number(match[1]);
+      const last = timestamps[timestamps.length - 1];
+      if (
+        Number.isFinite(timestamp) &&
+        (last === undefined || timestamp - last >= minInterval)
+      )
+        timestamps.push(timestamp);
+      if (timestamps.length >= maxFrames) break;
+    }
+    pending = input.slice(Math.max(consumed, input.length - 128));
+  };
   const result = await run(
     operation.runtime?.ffmpegPath ?? "ffmpeg",
     [
@@ -218,23 +242,11 @@ async function detectSceneTimestamps(
       "null",
       "-",
     ],
-    operation
+    { ...operation, stdoutMode: "tail", onStderr: receive }
   );
-
-  const timestamps: number[] = [];
-  const lines = result.stderr.split("\n");
-
-  for (const line of lines) {
-    const match = line.match(/pts_time:(\d+\.?\d*)/);
-    if (match) {
-      const timestamp = parseFloat(match[1]);
-      const lastTs = timestamps[timestamps.length - 1];
-      if (lastTs === undefined || timestamp - lastTs >= minInterval) {
-        timestamps.push(timestamp);
-      }
-      if (timestamps.length >= maxFrames) break;
-    }
-  }
+  // Injected command adapters may provide a complete result without callbacks.
+  if (!streamed) receive(result.stderr);
+  receive("\n");
 
   return timestamps;
 }

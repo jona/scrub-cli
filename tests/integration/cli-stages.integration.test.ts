@@ -1,6 +1,7 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createNativeCliFixture,
@@ -15,6 +16,41 @@ afterEach(async () => {
 });
 
 describe("manual CLI stages through application use cases", () => {
+  it("uses an explicitly configured Python for faster-whisper when PATH Python has no module", async () => {
+    const f = await createNativeCliFixture();
+    fixtures.push(f);
+    const python = join(f.root, "configured Python");
+    const calls = join(f.root, "configured-python.jsonl");
+    await writeFile(
+      python,
+      `#!${process.execPath}\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(args)+'\\n');if(args[0]==='-c')process.stdout.write('ok');else{const request=JSON.parse(fs.readFileSync(args[1],'utf8'));fs.writeFileSync(request.outputPath,JSON.stringify({segments:[{start:0,end:1,text:'Configured Python transcript'}],language:'en',duration:1}));}`,
+      { mode: 0o700 }
+    );
+    const entry = await f.file(
+      "configured-python-entry.mjs",
+      `process.env.SCRUB_PYTHON_PATH=${JSON.stringify(python)};await import(${JSON.stringify(pathToFileURL(resolve("src/deployments/local/cli.ts")).href)});`
+    );
+    const audio = await f.file("audio.wav");
+    const output = join(f.root, "configured-transcript.json");
+    const result = await f.run(
+      ["transcribe", audio, "--transcriber", "faster-whisper", "-o", output],
+      12_000,
+      entry
+    );
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    expect(await readJson(output)).toMatchObject({
+      source: "faster-whisper",
+      fullText: "Configured Python transcript",
+    });
+    const invocations = (await readFile(calls, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(invocations).toHaveLength(2);
+    expect(invocations[0][0]).toBe("-c");
+    expect(invocations[1][0]).toMatch(/transcribe\.py$/);
+  });
+
   it("keeps doctor and transcription discovery available through the active CLI diagnostics", async () => {
     const f = await createNativeCliFixture();
     fixtures.push(f);
@@ -145,7 +181,7 @@ describe("manual CLI stages through application use cases", () => {
     );
     expect(
       (await f.calls()).filter(
-        (call) => call.tool === "yt-dlp" && !call.args.includes("--dump-json")
+        (call) => call.tool === "yt-dlp" && !call.args.includes("--print")
       )
     ).toHaveLength(1);
   }, 30_000);

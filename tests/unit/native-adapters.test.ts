@@ -142,14 +142,18 @@ describe("bounded native processes", () => {
       stderr: "diagnostic",
     });
   });
-  it("kills a runaway process at its deadline", async () => {
-    await expect(
-      runCommand(process.execPath, ["-e", "setInterval(()=>{},1000)"], {
-        timeoutMs: 50,
-      })
-    ).rejects.toMatchObject({ code: "timeout" });
-  });
-  it("enforces diagnostic byte limits", async () => {
+  it.each(["complete", "tail"] as const)(
+    "kills a runaway %s process at its deadline",
+    async (stdoutMode) => {
+      await expect(
+        runCommand(process.execPath, ["-e", "setInterval(()=>{},1000)"], {
+          timeoutMs: 50,
+          stdoutMode,
+        })
+      ).rejects.toMatchObject({ code: "timeout" });
+    }
+  );
+  it("rejects overflowing structured stdout instead of returning truncated data", async () => {
     await expect(
       runCommand(
         process.execPath,
@@ -160,6 +164,111 @@ describe("bounded native processes", () => {
         { maxOutputBytes: 100 }
       )
     ).rejects.toMatchObject({ code: "resource_limit" });
+  });
+  it("streams all diagnostics while retaining bounded stdout and stderr tails", async () => {
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    const result = await runCommand(
+      process.execPath,
+      [
+        "-e",
+        "process.stdout.write('s'.repeat(1024*1024)+'STDOUT_END');process.stderr.write('e'.repeat(1024*1024)+'STDERR_END')",
+      ],
+      {
+        stdoutMode: "tail",
+        maxOutputBytes: 128,
+        maxDiagnosticBytes: 96,
+        onStdout: (text) => {
+          stdoutBytes += Buffer.byteLength(text);
+        },
+        onStderr: (text) => {
+          stderrBytes += Buffer.byteLength(text);
+        },
+      }
+    );
+    expect(result.code).toBe(0);
+    expect(stdoutBytes).toBe(1024 * 1024 + 10);
+    expect(stderrBytes).toBe(1024 * 1024 + 10);
+    expect(Buffer.byteLength(result.stdout)).toBe(128);
+    expect(Buffer.byteLength(result.stderr)).toBe(96);
+    expect(result.stdout.endsWith("STDOUT_END")).toBe(true);
+    expect(result.stderr.endsWith("STDERR_END")).toBe(true);
+  });
+  it("keeps machine-readable stdout complete despite oversized stderr progress", async () => {
+    const result = await runCommand(
+      process.execPath,
+      [
+        "-e",
+        "process.stderr.write('progress'.repeat(200000));process.stdout.write(JSON.stringify({value:'complete 😀'}))",
+      ],
+      { maxOutputBytes: 128, maxDiagnosticBytes: 64 }
+    );
+    expect(JSON.parse(result.stdout)).toEqual({ value: "complete 😀" });
+    expect(Buffer.byteLength(result.stderr)).toBeLessThanOrEqual(64);
+  });
+  it("counts structured output bytes and retains valid UTF-8 boundaries in diagnostic tails", async () => {
+    await expect(
+      runCommand(process.execPath, ["-e", "process.stdout.write('😀')"], {
+        maxOutputBytes: 3,
+      })
+    ).rejects.toMatchObject({ code: "resource_limit" });
+    const full = await runCommand(
+      process.execPath,
+      ["-e", "process.stdout.write('😀')"],
+      { maxOutputBytes: 4 }
+    );
+    expect(full.stdout).toBe("😀");
+    const streamed: string[] = [];
+    const result = await runCommand(
+      process.execPath,
+      [
+        "-e",
+        `
+      const bytes=Buffer.from('α😀中Tail');
+      let index=0;
+      const timer=setInterval(()=>{
+        if(index===bytes.length){clearInterval(timer);return;}
+        process.stdout.write(bytes.subarray(index,index+1));index++;
+      },2);
+    `,
+      ],
+      {
+        stdoutMode: "tail",
+        maxOutputBytes: 9,
+        onStdout: (text) => streamed.push(text),
+      }
+    );
+    expect(streamed.join("")).toBe("α😀中Tail");
+    expect(result.stdout).toBe("中Tail");
+    expect(result.stdout).not.toContain("�");
+    expect(Buffer.byteLength(result.stdout)).toBeLessThanOrEqual(9);
+  });
+  it.each([0, -1, 0.5, Infinity, NaN])(
+    "rejects invalid retained byte limits: %s",
+    async (maximum) => {
+      for (const options of [
+        { maxOutputBytes: maximum },
+        { maxDiagnosticBytes: maximum },
+      ]) {
+        await expect(
+          runCommand("must-not-start", [], options)
+        ).rejects.toMatchObject({ code: "invalid_input" });
+      }
+    }
+  );
+  it("stops a process when an output sink fails", async () => {
+    await expect(
+      runCommand(
+        process.execPath,
+        ["-e", "process.stdout.write('ready');setInterval(()=>{},1000)"],
+        {
+          stdoutMode: "tail",
+          onStdout: () => {
+            throw new Error("sink failed");
+          },
+        }
+      )
+    ).rejects.toThrow("sink failed");
   });
   it("cancels work and does not report a killed process as success", async () => {
     const controller = new AbortController();
@@ -333,6 +442,42 @@ describe("semantic native media adapter", () => {
     expect(
       frames.every((frame) => frame.artifact.mediaType === "image/png")
     ).toBe(true);
+    expect(await readdir(join(root, "stage"))).toEqual([]);
+  });
+
+  it("preserves early scene timestamps while streaming excessive ffmpeg diagnostics", async () => {
+    const root = await temporary();
+    const storage = new FilesystemArtifactStorage(join(root, "store"));
+    const input = await storage.put("video", bytes("video"), "video/mp4");
+    const probe = await executable(
+      root,
+      "scene probe",
+      "process.stdout.write('20')"
+    );
+    const converter = await executable(
+      root,
+      "noisy converter",
+      `
+      const fs=require('node:fs');
+      const args=process.argv.slice(2);
+      if(args.includes('-filter:v')){
+        process.stderr.write('pts_t');
+        setTimeout(()=>{
+          process.stderr.write('ime:2.125 pos:1\\n'+'progress '.repeat(128*1024)+'\\npts_time:6.25 pos:2\\n'+'progress '.repeat(128*1024));
+        },20);
+      } else {
+        process.stdout.write('progress '.repeat(600*1024));
+        fs.writeFileSync(args.at(-1),'png');
+      }
+    `
+    );
+    const media = new NodeMediaProcessor(storage, {
+      stagingRoot: join(root, "stage"),
+      ffprobePath: probe,
+      ffmpegPath: converter,
+    });
+    const frames = await media.extractFrames(input, settings(), context());
+    expect(frames.map((frame) => frame.timestamp)).toEqual([2.125, 6.25]);
     expect(await readdir(join(root, "stage"))).toEqual([]);
   });
 

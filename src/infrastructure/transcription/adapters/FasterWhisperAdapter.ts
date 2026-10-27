@@ -130,7 +130,7 @@ export class FasterWhisperAdapter implements ITranscriber {
       const result = await (runtime?.runCommand ?? runCommand)(
         this.pythonPath!,
         [scriptPath, requestPath],
-        options
+        { ...options, stdoutMode: "tail" }
       );
 
       if (result.code !== 0) {

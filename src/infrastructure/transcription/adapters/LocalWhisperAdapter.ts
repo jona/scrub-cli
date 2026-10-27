@@ -136,7 +136,7 @@ export class LocalWhisperAdapter implements ITranscriber {
       const result = await (runtime?.runCommand ?? runCommand)(
         this.whisperPath!,
         args,
-        options
+        { ...options, stdoutMode: "tail" }
       );
 
       if (result.code !== 0) {

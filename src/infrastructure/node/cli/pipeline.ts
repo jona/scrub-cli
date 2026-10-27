@@ -153,6 +153,7 @@ export function createLocalAdapters(options: LocalPipelineOptions = {}) {
   );
   const runtime = {
     stagingRoot: join(cache, "workspaces"),
+    pythonPath: process.env.SCRUB_PYTHON_PATH,
     providers: config.getTranscription().priority,
     whisperBinaryPath,
     whisperModelsPath,

@@ -31,6 +31,7 @@ export async function download(
   const common = [
     "--no-playlist",
     "--no-warnings",
+    "--no-progress",
     "--socket-timeout",
     "30",
     "--retries",
@@ -55,7 +56,7 @@ export async function download(
       "--",
       url,
     ],
-    options
+    { ...options, stdoutMode: "tail" }
   );
   if (audio.code !== 0)
     throw new PipelineError("processing_failed", "Unable to download audio", {
@@ -77,7 +78,7 @@ export async function download(
         "--",
         url,
       ],
-      options
+      { ...options, stdoutMode: "tail" }
     );
     if (video.code === 0) videoPath = path;
     else
@@ -95,7 +96,19 @@ export async function fetchYouTubeMetadata(
   const run = options.runtime?.runCommand ?? runCommand;
   const result = await run(
     options.runtime?.ytdlpPath ?? "yt-dlp",
-    ["--dump-json", "--no-download", "--no-playlist", "--", url],
+    [
+      "--print",
+      "%(.{title,description,duration,thumbnail,channel,upload_date})j",
+      "--skip-download",
+      "--no-playlist",
+      "--socket-timeout",
+      "30",
+      "--retries",
+      "2",
+      "--no-warnings",
+      "--",
+      url,
+    ],
     { ...options, maxOutputBytes: options.maxOutputBytes ?? 1024 * 1024 }
   );
   if (result.code !== 0)

@@ -49,6 +49,8 @@ pip install faster-whisper
 Run `scrub doctor` to inspect tools/settings, or `scrub transcribers` to inspect
 adapters. Local Whisper can be configured with an executable path and model
 directory. The Rivet image supplies its own tools and base model.
+Set `SCRUB_PYTHON_PATH` to the Python executable containing `faster-whisper` when
+it is installed in a different environment from the `python3` on your PATH.
 
 ## CLI configuration
 
@@ -93,26 +95,27 @@ scrub file ./podcast.mp3
 
 # Opt in to vision, summary generation, and Markdown rendering
 scrub youtube https://www.youtube.com/watch?v=dQw4w9WgXcQ --summarize
+scrub youtube https://www.youtube.com/watch?v=dQw4w9WgXcQ --summarize --no-visuals
 scrub file ./recording.mp4 --summarize --summary-provider anthropic --vision-provider openai
 
 # Development uses the same local composition
 npm run dev -- youtube https://www.youtube.com/watch?v=dQw4w9WgXcQ
 ```
 
-| `scrub youtube` option                                 | Behavior                                                                              |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| `-o, --output-dir <path>`                              | Override output directory                                                             |
-| `-t, --transcriber <name>`                             | Select `local-whisper`, `faster-whisper`, `openai`, `deepgram`, or `youtube-captions` |
-| `--no-visuals`                                         | Skip frame extraction                                                                 |
-| `--scene-threshold <n>`                                | Scene threshold, default 0.4                                                          |
-| `--max-frames <n>`                                     | Frame limit, default 20                                                               |
-| `-v, --verbose`                                        | Detailed progress                                                                     |
-| `--max-videos <n>`                                     | Bound playlist entries                                                                |
-| `--parallel <n>`                                       | Bound per-request concurrent processing, default 1                                    |
-| `--no-skip-existing`                                   | Force reprocessing                                                                    |
-| `--summarize`                                          | Run configured vision/summary models and render Markdown                              |
-| `--summary-provider <name>` / `--summary-model <name>` | Override the summary selection; requires `--summarize`                                |
-| `--vision-provider <name>` / `--vision-model <name>`   | Override the vision selection; requires `--summarize`                                 |
+| `scrub youtube` option                                 | Behavior                                                                                        |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `-o, --output-dir <path>`                              | Override output directory                                                                       |
+| `-t, --transcriber <name>`                             | Select `local-whisper`, `faster-whisper`, `openai`, `deepgram`, or `youtube-captions`           |
+| `--no-visuals`                                         | Skip video download, frame extraction, and vision model calls; keep transcription and summaries |
+| `--scene-threshold <n>`                                | Scene threshold, default 0.4                                                                    |
+| `--max-frames <n>`                                     | Frame limit, default 20                                                                         |
+| `-v, --verbose`                                        | Detailed progress                                                                               |
+| `--max-videos <n>`                                     | Bound playlist entries                                                                          |
+| `--parallel <n>`                                       | Bound per-request concurrent processing, default 1                                              |
+| `--no-skip-existing`                                   | Force reprocessing                                                                              |
+| `--summarize`                                          | Run configured vision/summary models and render Markdown                                        |
+| `--summary-provider <name>` / `--summary-model <name>` | Override the summary selection; requires `--summarize`                                          |
+| `--vision-provider <name>` / `--vision-model <name>`   | Override the vision selection; requires `--summarize`                                           |
 
 `file` supports the media options above, excluding playlist options. MP3 input
 always skips frames. YouTube input is parsed into canonical, validated video or

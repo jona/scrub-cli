@@ -173,11 +173,10 @@ async function extractAudioToWav(
   if (options.maxArtifactBytes !== undefined)
     args.splice(args.length - 1, 0, "-fs", String(options.maxArtifactBytes));
   const run = options.runtime?.runCommand ?? runCommand;
-  const result = await run(
-    options.runtime?.ffmpegPath ?? "ffmpeg",
-    args,
-    options
-  );
+  const result = await run(options.runtime?.ffmpegPath ?? "ffmpeg", args, {
+    ...options,
+    stdoutMode: "tail",
+  });
 
   if (result.code !== 0) {
     throw new Error(`Failed to extract audio: ${result.stderr}`);

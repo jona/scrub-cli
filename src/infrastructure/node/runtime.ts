@@ -35,6 +35,7 @@ export interface NativeOperationOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   maxOutputBytes?: number;
+  maxDiagnosticBytes?: number;
   runtime?: NativeRuntimeOptions;
   maxDurationSeconds?: number;
   maxSourceBytes?: number;
