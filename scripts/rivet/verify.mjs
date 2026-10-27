@@ -1,156 +1,192 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createClient } from "rivetkit/client";
 
-const { RIVET_ENDPOINT, RIVET_TOKEN, RIVET_PUBLIC_URL } = process.env;
-if (!RIVET_ENDPOINT || !RIVET_TOKEN || !RIVET_PUBLIC_URL) {
-  throw new Error(
-    "Set RIVET_ENDPOINT, RIVET_TOKEN, and RIVET_PUBLIC_URL in .env.rivet.local"
+const terminal = (status) =>
+  ["completed", "completed_with_errors", "failed", "cancelled"].includes(
+    status
   );
-}
-if (new URL(RIVET_ENDPOINT).hostname === new URL(RIVET_PUBLIC_URL).hostname) {
-  throw new Error(
-    "RIVET_ENDPOINT must be the engine URL, separate from the app URL"
+const wait = (duration) => new Promise((done) => setTimeout(done, duration));
+
+/** Exercise current job actors. Dependencies are injectable; importing this file does no work. */
+export async function verifyRivetDeployment(configuration, dependencies = {}) {
+  const { endpoint, token, publicUrl, videoUrl } = configuration;
+  const key = configuration.key ?? `deploy-smoke-${randomUUID()}`;
+  if (!endpoint || !token || !publicUrl)
+    throw new Error("Set RIVET_ENDPOINT, RIVET_TOKEN, and RIVET_PUBLIC_URL");
+  if (new URL(endpoint).hostname === new URL(publicUrl).hostname)
+    throw new Error("The engine endpoint and public app URL must be separate");
+  if (!/^[A-Za-z0-9_-]{1,200}$/.test(key))
+    throw new Error("Use an opaque verification key of at most 200 characters");
+  const request = dependencies.fetch ?? globalThis.fetch;
+  const create = dependencies.createClient ?? createClient;
+  const sleep = dependencies.sleep ?? wait;
+  const now = dependencies.now ?? Date.now;
+  const health = await request(new URL("/healthz", publicUrl), {
+    signal: AbortSignal.timeout(30_000),
+  });
+  assert.equal(health.status, 200, "Public app must answer HTTP 200");
+  const info = await health.json();
+  assert.equal(info.service, "scrub");
+  assert.equal(info.status, "ok");
+  const unauthenticated = await request(new URL(`/jobs/${key}`, publicUrl), {
+    signal: AbortSignal.timeout(30_000),
+  });
+  assert.equal(
+    unauthenticated.status,
+    401,
+    "Job routes must require authentication"
   );
-}
+  await unauthenticated.body?.cancel();
 
-const health = await fetch(new URL("/healthz", RIVET_PUBLIC_URL), {
-  signal: AbortSignal.timeout(30_000),
-});
-assert.equal(health.status, 200, "Public app must answer HTTP 200");
-const info = await health.json();
-assert.equal(info.service, "scrub");
-assert.equal(info.status, "ok");
-
-const client = createClient({
-  endpoint: process.env.RIVET_ENDPOINT,
-  token: process.env.RIVET_TOKEN,
-});
-const key = process.env.RIVET_VERIFY_KEY ?? `deploy-smoke-${randomUUID()}`;
-const content = "Rivet keeps Scrub knowledge artifacts in a stateful actor.";
-const metadata = { title: "Scrub deployment verification" };
-const summary = {
-  tldr: "Scrub runs on Rivet.",
-  overview: "The prompt and render actions are available through the engine.",
-  thesisAndClaims: { thesis: "Artifacts persist in actors", keyClaims: [] },
-  actionableInsights: [],
-  concepts: [],
-  mentalModels: [],
-  structureMap: [],
-  openQuestions: [],
-  notableQuotes: [],
-  biasAnalysis: { perspective: "", possibleBiases: [], blindSpots: [] },
-  knowledgeGraph: {
-    topics: [],
-    people: [],
-    tools: [],
-    technologies: [],
-    relationships: [],
-  },
-  difficulty: { level: "beginner", prerequisites: [], targetAudience: "" },
-  reusabilityPrompts: {},
-  confidence: { level: "high", reasoning: "Verified by the deployment script" },
-  sections: [],
-  keyTakeaways: [],
-  codeSnippets: [],
-  references: [],
-};
-
-try {
-  const actor = client.scrub.getOrCreate([key]);
-  await actor.buildPrompt({ metadata, content });
-  const storedPrompt = await actor.getArtifacts();
-  assert.equal(storedPrompt.revision, 1);
-  assert.ok(storedPrompt.prompt.prompt.includes(content));
-  assert.equal(storedPrompt.prompt.schema.title, "ScrubSummary");
-
-  await assert.rejects(actor.buildPrompt({ metadata, content: "" }));
-  assert.equal((await actor.getArtifacts()).revision, 1);
-
-  await actor.renderSummary({ metadata, summary });
-  const stored = await actor.getArtifacts();
-  assert.equal(stored.revision, 2);
-  assert.ok(
-    stored.rendered.markdown.includes("# Scrub deployment verification")
-  );
-  assert.ok(stored.rendered.markdown.includes(summary.tldr));
-  assert.ok(stored.prompt.prompt.includes(content));
-
-  const isolated = await client.scrub
-    .getOrCreate([`${key}-isolation`])
-    .getArtifacts();
-  assert.equal(isolated.revision, 0);
-  assert.equal(isolated.prompt, null);
-  assert.equal(isolated.rendered, null);
-  console.log(
-    JSON.stringify({
-      publicHttp: "passed",
-      actor: "scrub",
-      key,
-      actions: ["buildPrompt", "renderSummary", "getArtifacts"],
-      revision: stored.revision,
-      invalidInputPreservesState: "passed",
-      actorIsolation: "passed",
-    })
-  );
-  if (process.env.RIVET_VERIFY_VIDEO_URL) {
-    const job = client.scrubRequest.getOrCreate([`${key}-pipeline`]);
-    const accepted = await job.start({
-      url: process.env.RIVET_VERIFY_VIDEO_URL,
-      maxVideos: 1,
-      concurrency: 1,
-      settings: { limits: { maxDurationSeconds: 120 } },
-    });
-    console.log(JSON.stringify({ pipeline: "accepted", jobId: accepted.id }));
-    const deadline = Date.now() + 5 * 60_000;
-    let status = accepted;
-    while (
-      !["completed", "completed_with_errors", "failed", "cancelled"].includes(
-        status.status
-      ) &&
-      Date.now() < deadline
-    ) {
-      await new Promise((resolve) => setTimeout(resolve, 2_000));
-      status = await job.getStatus();
-    }
-    const results = await job.getResults(0, 1);
-    const item = results.items[0];
-    console.log(
-      JSON.stringify({
-        pipeline: status.status,
-        jobId: accepted.id,
-        completed: status.completed,
-        failed: status.failed,
-        videoId: item?.videoId,
-        stage: item?.stage,
-        failureCode: item?.failure?.code ?? status.failure?.code,
+  const client = create({ endpoint, token });
+  let actor;
+  let submitted = false;
+  let finished = false;
+  try {
+    actor = client.scrubRequest.getOrCreate([key]);
+    const before = await actor.getStatus();
+    await assert.rejects(
+      actor.start({
+        url: "https://example.invalid/not-a-youtube-source",
+        settings: { inference: { mode: "preprocess" } },
       })
     );
+    assert.deepEqual(
+      await actor.getStatus(),
+      before,
+      "Rejected input must not change durable request state"
+    );
+    const isolated = await client.scrubRequest
+      .getOrCreate([`${key}-isolation`])
+      .getStatus();
+    assert.equal(
+      isolated,
+      null,
+      "A fresh request actor must have isolated state"
+    );
+    const report = {
+      publicHttp: "passed",
+      authentication: "passed",
+      actor: "scrubRequest",
+      key,
+      actions: ["getStatus", "start(invalid)"],
+      invalidInputPreservesState: "passed",
+      actorIsolation: "passed",
+      pipeline: "unverified",
+    };
+    if (!videoUrl) return report;
+
+    const accepted = await actor.start({
+      url: videoUrl,
+      maxVideos: 1,
+      concurrency: 1,
+      settings: {
+        skipVisuals: true,
+        inference: { mode: "preprocess" },
+        limits: { maxDurationSeconds: 120 },
+      },
+    });
+    submitted = true;
+    assert.equal(accepted.id, key);
+    let status = accepted;
+    const deadline = now() + 5 * 60_000;
+    while (!terminal(status.status) && now() < deadline) {
+      await sleep(2_000);
+      status = await actor.getStatus();
+      assert.ok(status, "Submitted request state must remain available");
+    }
     assert.equal(
       status.status,
       "completed",
-      "Live video pipeline must finish successfully"
+      "Optional preprocessing verification must finish successfully"
     );
+    finished = true;
+    const results = await actor.getResults(0, 1);
+    const item = results.items[0];
     assert.ok(
       item?.result,
-      "Completed job must expose its artifact references"
+      "Completed request must expose artifact references"
     );
-    const transcript = await client.scrubVideo
-      .get([accepted.id, item.videoId])
-      .readArtifact(item.result.transcript.id, 0, 128 * 1024);
-    const parsed = JSON.parse(
-      Buffer.from(transcript.data, "base64").toString("utf8")
+    assert.equal(item.result.mode, "preprocess");
+    const readArtifact = async (ref) => {
+      assert.ok(
+        ref &&
+          Number.isSafeInteger(ref.size) &&
+          ref.size > 0 &&
+          ref.size <= 2 * 1024 * 1024,
+        "Verification artifacts must have bounded declared sizes"
+      );
+      const parts = [];
+      for (let offset = 0; offset < ref.size; ) {
+        const length = Math.min(128 * 1024, ref.size - offset);
+        const chunk = await client.scrubVideo
+          .get([key, item.videoId])
+          .readArtifact(ref.id, offset, length);
+        const bytes = Buffer.from(chunk.data, "base64");
+        assert.equal(chunk.size, ref.size, "Artifact size must remain stable");
+        assert.ok(
+          bytes.byteLength > 0 && bytes.byteLength <= length,
+          "Artifact reads must advance within the requested bound"
+        );
+        parts.push(bytes);
+        offset += bytes.byteLength;
+      }
+      return Buffer.concat(parts).toString("utf8");
+    };
+    const transcript = JSON.parse(await readArtifact(item.result.transcript));
+    assert.ok(
+      typeof transcript.fullText === "string" && transcript.fullText.trim()
     );
-    assert.equal(typeof parsed.fullText, "string");
-    assert.ok(item.result.prompt.id);
-    console.log(
-      JSON.stringify({
-        pipelineArtifacts: "passed",
-        transcriptCharacters: parsed.fullText.length,
-        frames: item.result.frames.length,
-      })
+    const prompt = await readArtifact(item.result.prompt);
+    assert.ok(
+      prompt.includes(transcript.fullText.trim().slice(0, 30)),
+      "Prompt must contain the generated transcript"
     );
+    const schema = JSON.parse(await readArtifact(item.result.schema));
+    assert.equal(schema.title, "ScrubSummary");
+    return {
+      ...report,
+      pipeline: "passed",
+      mode: "preprocess",
+      jobId: accepted.id,
+      pipelineArtifacts: "passed",
+      videoId: item.videoId,
+      transcriptCharacters: transcript.fullText.length,
+    };
+  } finally {
+    if (submitted && !finished) {
+      try {
+        const status = await actor.getStatus();
+        if (status && !terminal(status.status)) await actor.cancel();
+      } catch {
+        /* A failed verification cannot guarantee cancellation during an outage. */
+      }
+    }
+    await client.dispose();
   }
-} finally {
-  await client.dispose();
+}
+
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  try {
+    const report = await verifyRivetDeployment({
+      endpoint: process.env.RIVET_ENDPOINT,
+      token: process.env.RIVET_TOKEN,
+      publicUrl: process.env.RIVET_PUBLIC_URL,
+      videoUrl: process.env.RIVET_VERIFY_VIDEO_URL,
+      key: process.env.RIVET_VERIFY_KEY,
+    });
+    console.log(JSON.stringify(report));
+  } catch {
+    // SDK exceptions may contain transport headers or provider details.
+    console.error(
+      "Rivet deployment verification failed; check server-only configuration, app health, and actor access"
+    );
+    process.exitCode = 1;
+  }
 }
