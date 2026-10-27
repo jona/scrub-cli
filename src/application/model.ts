@@ -14,6 +14,13 @@ export interface StructuredModelRequest {
   schemaName: string;
   images?: { data: Uint8Array; mediaType: string }[];
   maxOutputTokens: number;
+  /** Opaque identifiers for an actual paid attempt, interpreted only by adapters. */
+  invocation?: {
+    step: string;
+    callIndex: number;
+    repairAttempt: number;
+    outputRetry: number;
+  };
 }
 
 /** Exact user-text envelope shared by prompt budgeting and provider transports. */

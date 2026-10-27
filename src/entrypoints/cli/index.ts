@@ -103,7 +103,8 @@ export async function runCli(
           logger.error("Missing prerequisites:");
           for (const missing of prereqs.missing)
             logger.keyValue("  ✗", missing);
-          process.exit(1);
+          process.exitCode = 1;
+          return;
         }
         for (const w of prereqs.warnings) logger.warn(w);
 
@@ -142,7 +143,8 @@ export async function runCli(
         await waitUntilExit();
       } catch (error) {
         logger.error((error as Error).message);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
     });
 
@@ -196,7 +198,8 @@ export async function runCli(
           logger.error("Missing prerequisites:");
           for (const missing of prereqs.missing)
             logger.keyValue("  ✗", missing);
-          process.exit(1);
+          process.exitCode = 1;
+          return;
         }
         for (const w of prereqs.warnings) logger.warn(w);
 
@@ -226,7 +229,8 @@ export async function runCli(
         );
       } catch (error) {
         logger.error((error as Error).message);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
     });
 
@@ -260,7 +264,8 @@ export async function runCli(
         logger.keyValue("  Metadata", `${outDir}/metadata.json`);
       } catch (error) {
         logger.error((error as Error).message);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
     });
 
@@ -294,7 +299,8 @@ export async function runCli(
         logger.keyValue("  Metadata", `${outDir}/metadata.json`);
       } catch (error) {
         logger.error((error as Error).message);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
     });
 
@@ -333,7 +339,8 @@ export async function runCli(
         logger.keyValue("  Segments", String(result.segments.length));
       } catch (error) {
         logger.error((error as Error).message);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
     });
 
@@ -378,7 +385,8 @@ export async function runCli(
         logger.keyValue("  Frames", framesDir);
       } catch (error) {
         logger.error((error as Error).message);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
     });
 
@@ -427,7 +435,8 @@ export async function runCli(
         );
       } catch (error) {
         logger.error((error as Error).message);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
     });
 
@@ -457,7 +466,8 @@ export async function runCli(
         logger.keyValue("  Output", outPath);
       } catch (error) {
         logger.error((error as Error).message);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
     });
 

@@ -5,6 +5,7 @@ import {
   type StructuredModelGateway,
 } from "../application/model.js";
 import type { OperationContext } from "../application/contracts.js";
+import type { LangSmithModelTracing } from "../infrastructure/observability/LangSmithModelTracing.js";
 import {
   ProviderModelGateway,
   type ServerModelProviderConfig,
@@ -126,7 +127,8 @@ export function resolveDeploymentModelConfig(
  */
 export function createDeploymentModelGateway(
   loadEnvironment: () => Record<string, string | undefined>,
-  refresh?: (context: OperationContext) => Promise<void>
+  refresh?: (context: OperationContext) => Promise<void>,
+  tracing?: Pick<LangSmithModelTracing, "wrap">
 ): StructuredModelGateway {
   let previous = "";
   let gateway: ProviderModelGateway | undefined;
@@ -146,7 +148,8 @@ export function createDeploymentModelGateway(
       context.signal.throwIfAborted();
       await refresh?.(context);
       context.signal.throwIfAborted();
-      return current().generate(request, context);
+      const provider = current();
+      return (tracing?.wrap(provider) ?? provider).generate(request, context);
     },
   };
 }

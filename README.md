@@ -206,6 +206,41 @@ Provider/model selectors, allowlists, inference budgets, and the model-call dead
 `--build-arg SCRUB_VISION_PROVIDER=anthropic --build-arg SCRUB_VISION_MODEL=claude-sonnet-5-5`
 selects Anthropic for vision. Provider keys are never build arguments.
 
+### Optional LangSmith tracing
+
+CLI, standalone API/MCP, and Rivet deployments can trace model calls through the
+same server-side adapter. Tracing is off by default. Enable it with
+`LANGSMITH_TRACING=true` and supply `LANGSMITH_API_KEY` through an ignored,
+owner-only env file or the deployment credential store. The key is never a
+Docker build argument, job setting, result artifact, or browser configuration.
+
+| Setting                           | Default                           | Purpose                                                                    |
+| --------------------------------- | --------------------------------- | -------------------------------------------------------------------------- |
+| `LANGSMITH_TRACING`               | `false`                           | Strict `true` or `false`; enables model-call tracing                       |
+| `LANGSMITH_PROJECT`               | `scrub`                           | Destination project                                                        |
+| `LANGSMITH_ENDPOINT`              | `https://api.smith.langchain.com` | HTTPS tracing endpoint without URL credentials, query, or fragment         |
+| `LANGSMITH_WORKSPACE_ID`          | Unset                             | Optional workspace selection                                               |
+| `SCRUB_LANGSMITH_CAPTURE_CONTENT` | `false`                           | Strict `true` or `false`; explicitly opts into prompt and response capture |
+| `SCRUB_LANGSMITH_TIMEOUT_MS`      | `2000`                            | Tracing HTTP deadline, integer 1–10,000 ms                                 |
+
+The default records model selections, step/attempt identifiers, timing, token
+usage, and sanitized failure categories. Prompt text, source transcripts, and
+model responses are omitted. Opting into content capture uploads prompts and
+responses, which may include transcript text and OCR evidence. Known server
+credentials are redacted before export. Image pixels are omitted from traces;
+image counts describe vision calls.
+
+Only actual model attempts create traces, including retries and note compression.
+Reusing cached results creates no new LLM calls or traces. Calls for the same
+video share a LangSmith thread ID across execution attempts.
+
+Tracing is best effort: a missing key or unavailable tracing service must not
+change a model result or cause pipeline retries. Pending traces drain when the
+CLI completes or a server shuts down. These settings belong to deployment
+composition; the shared pipeline and entry points do not import LangSmith or
+read tracing environment variables. Public tracing settings are also Docker
+build arguments; credentials remain server-side.
+
 ### Rivet provider credentials
 
 Rivet's documented [credentials actor pattern](https://rivet.dev/agents/docs/user-subscriptions/)
@@ -225,10 +260,8 @@ chmod 600 .env.models.local
 Edit that file locally with only these fields, filling in the provider keys you
 intend to use:
 
-```dotenv
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
-```
+Set `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` in that file. Add
+`LANGSMITH_API_KEY` when enabling LangSmith tracing.
 
 After the image rollout, the provisioning command loads server/admin settings from
 `.env.rivet.local` and provider keys from `.env.models.local`. It also accepts
@@ -244,6 +277,9 @@ Saving again rotates stored keys. `npm run credentials:rivet -- remove anthropic
 removes a stored key. Keys refresh before each new model call; calls already in
 flight retain their credential. Explicit environment keys take precedence over
 stored keys. `SCRUB_MODEL_CREDENTIAL_SOURCE=environment` disables actor lookup.
+The same provisioning command accepts an optional `LANGSMITH_API_KEY` and stores
+it under the `langsmith` service. `npm run credentials:rivet -- remove langsmith`
+removes it. Runners look up the stored tracing key only when tracing is enabled.
 
 The credential actor requires a short-lived, actor-bound authorization proof.
 The raw Rivet admin token remains in the server/deployment environment; the proof

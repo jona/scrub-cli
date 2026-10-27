@@ -6,6 +6,8 @@ import {
   resolveDeploymentModelConfig,
 } from "../model-config.js";
 import { resolveRuntimeConcurrency } from "../../infrastructure/runtime/config.js";
+import { resolveLangSmithTracingConfig } from "../tracing-config.js";
+import { LangSmithModelTracing } from "../../infrastructure/observability/LangSmithModelTracing.js";
 
 /** Explicit server composition; imports neither start listeners nor read CLI/HOME configuration. */
 export function createLocalApplicationFromEnvironment(
@@ -13,6 +15,10 @@ export function createLocalApplicationFromEnvironment(
 ) {
   const resourceCeilings = resolveServerResourceLimits(env);
   const concurrency = resolveRuntimeConcurrency(env);
+  resolveLangSmithTracingConfig(env);
+  const tracing = new LangSmithModelTracing(() =>
+    resolveLangSmithTracingConfig(env)
+  );
   const runtime = new LocalJobRuntime({
     dataRoot: resolve(env.SCRUB_DATA_DIR ?? ".local/runtime"),
     native: {
@@ -29,7 +35,7 @@ export function createLocalApplicationFromEnvironment(
       openaiApiKey: env.OPENAI_API_KEY,
       deepgramApiKey: env.DEEPGRAM_API_KEY,
     },
-    models: createDeploymentModelGateway(() => env),
+    models: createDeploymentModelGateway(() => env, undefined, tracing),
     inferenceDefaults: resolveDeploymentModelConfig(env).defaults,
     resourceCeilings,
     requestDefault: concurrency.requestDefault,
@@ -37,9 +43,17 @@ export function createLocalApplicationFromEnvironment(
     globalLimit: concurrency.globalLimit,
   });
   runtime.start();
+  let closing: Promise<void> | undefined;
   return {
     jobs: runtime.jobs,
     signal: runtime.signal,
-    close: () => runtime.close(),
+    close: () =>
+      (closing ??= (async () => {
+        try {
+          await runtime.close();
+        } finally {
+          await tracing.flush();
+        }
+      })()),
   };
 }

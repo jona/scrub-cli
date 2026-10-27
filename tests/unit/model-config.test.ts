@@ -8,6 +8,7 @@ import {
   DEFAULT_INFERENCE_LIMITS,
   resolveInferenceSettings,
   validateInferenceSettingsInput,
+  type StructuredModelGateway,
 } from "../../src/application/model.js";
 
 describe("inference settings boundaries", () => {
@@ -80,6 +81,89 @@ describe("inference settings boundaries", () => {
 });
 
 describe("deployment model registry", () => {
+  it("wraps the refreshed provider capability only for generation, keeping preflight network-free", async () => {
+    let key: string | undefined;
+    const order: string[] = [];
+    const selection = { provider: "openai", model: "gpt-6.1-sol" };
+    const tracing = {
+      wrap: vi.fn((delegate: StructuredModelGateway) => {
+        order.push("wrap");
+        expect(delegate.supports(selection)).toBe(true);
+        return {
+          supports: (model: typeof selection) => delegate.supports(model),
+          generate: vi.fn(async () => {
+            order.push("generate");
+            return { value: { complete: true }, ...selection };
+          }),
+        };
+      }),
+    };
+    const gateway = createDeploymentModelGateway(
+      () => ({ OPENAI_API_KEY: key }),
+      async () => {
+        order.push("refresh");
+        key = "fresh-server-provider-secret";
+      },
+      tracing
+    );
+    expect(gateway.supports(selection)).toBe(false);
+    expect(tracing.wrap).not.toHaveBeenCalled();
+    expect(
+      await gateway.generate(
+        {
+          selection,
+          system: "system",
+          prompt: "prompt",
+          schema: {},
+          schemaName: "fixture",
+          maxOutputTokens: 512,
+        },
+        {
+          runId: "run",
+          attemptId: "attempt",
+          signal: new AbortController().signal,
+          now: Date.now,
+          emit: () => {},
+        }
+      )
+    ).toMatchObject({ value: { complete: true } });
+    expect(order).toEqual(["refresh", "wrap", "generate"]);
+  });
+
+  it("does not start tracing or generation after credential refresh cancels the operation", async () => {
+    const controller = new AbortController();
+    const tracing = {
+      wrap: vi.fn((delegate: StructuredModelGateway) => delegate),
+    };
+    const gateway = createDeploymentModelGateway(
+      () => ({}),
+      async () => {
+        controller.abort();
+      },
+      tracing
+    );
+    await expect(
+      gateway.generate(
+        {
+          selection: { provider: "openai", model: "gpt-6.1-sol" },
+          system: "",
+          prompt: "",
+          schema: {},
+          schemaName: "fixture",
+          maxOutputTokens: 512,
+        },
+        {
+          runId: "run",
+          attemptId: "attempt",
+          signal: controller.signal,
+          now: Date.now,
+          emit: () => {},
+        }
+      )
+    ).rejects.toThrow();
+    expect(tracing.wrap).not.toHaveBeenCalled();
+  });
+
   it("defaults full processing to OpenAI and keeps credentials out of persisted defaults", () => {
     const config = resolveDeploymentModelConfig({
       OPENAI_API_KEY: "test-only-provider-key",

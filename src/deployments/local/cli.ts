@@ -17,6 +17,8 @@ import {
 } from "../model-config.js";
 import { resolveLocalInference } from "./inference.js";
 import type { CliInferenceOptions } from "../../entrypoints/cli/dependencies.js";
+import { resolveLangSmithTracingConfig } from "../tracing-config.js";
+import { LangSmithModelTracing } from "../../infrastructure/observability/LangSmithModelTracing.js";
 
 const modelEnvironment = () => ({
   ...process.env,
@@ -24,7 +26,15 @@ const modelEnvironment = () => ({
   ANTHROPIC_API_KEY:
     process.env.ANTHROPIC_API_KEY ?? config.getApiKey("anthropic"),
 });
-const models = createDeploymentModelGateway(modelEnvironment);
+resolveLangSmithTracingConfig(modelEnvironment());
+const tracing = new LangSmithModelTracing(() =>
+  resolveLangSmithTracingConfig(modelEnvironment())
+);
+const models = createDeploymentModelGateway(
+  modelEnvironment,
+  undefined,
+  tracing
+);
 const stages = createCliStages();
 const modelDefaults = (overrides: CliInferenceOptions) => {
   const env: Record<string, string | undefined> = modelEnvironment();
@@ -48,43 +58,47 @@ const modelDefaults = (overrides: CliInferenceOptions) => {
   return resolveDeploymentModelConfig(env).defaults;
 };
 
-await runCli(process.argv, {
-  config,
-  processFile: (file, options) =>
-    processFile(
-      file,
-      resolveLocalInference(
-        {
-          ...options,
-          skipVisuals:
-            extname(file).toLowerCase() === ".mp3" || options?.skipVisuals,
-        },
-        modelDefaults,
-        models,
-        config.getOutput().includeFullTranscript
-      )
-    ),
-  processYouTubePlaylist: (url, options) =>
-    processYouTubePlaylist(
-      url,
-      resolveLocalInference(
-        options ?? {},
-        modelDefaults,
-        models,
-        config.getOutput().includeFullTranscript
-      )
-    ),
-  checkFilePrerequisites,
-  checkYouTubePrerequisites,
-  getDiagnostics,
-  ...stages,
-  getTranscriberDiagnostics,
-  renderSummaryFile: (path, options) =>
-    stages.renderSummaryFile(path, {
-      ...options,
-      includeFullTranscript:
-        options?.includeFullTranscript ??
-        config.getOutput().includeFullTranscript,
-      generatedAt: options?.generatedAt ?? new Date().toISOString(),
-    }),
-});
+try {
+  await runCli(process.argv, {
+    config,
+    processFile: (file, options) =>
+      processFile(
+        file,
+        resolveLocalInference(
+          {
+            ...options,
+            skipVisuals:
+              extname(file).toLowerCase() === ".mp3" || options?.skipVisuals,
+          },
+          modelDefaults,
+          models,
+          config.getOutput().includeFullTranscript
+        )
+      ),
+    processYouTubePlaylist: (url, options) =>
+      processYouTubePlaylist(
+        url,
+        resolveLocalInference(
+          options ?? {},
+          modelDefaults,
+          models,
+          config.getOutput().includeFullTranscript
+        )
+      ),
+    checkFilePrerequisites,
+    checkYouTubePrerequisites,
+    getDiagnostics,
+    ...stages,
+    getTranscriberDiagnostics,
+    renderSummaryFile: (path, options) =>
+      stages.renderSummaryFile(path, {
+        ...options,
+        includeFullTranscript:
+          options?.includeFullTranscript ??
+          config.getOutput().includeFullTranscript,
+        generatedAt: options?.generatedAt ?? new Date().toISOString(),
+      }),
+  });
+} finally {
+  await tracing.flush();
+}

@@ -22,6 +22,8 @@ import {
 import {
   EnvironmentCredentialsResolver,
   FallbackCredentialsResolver,
+  CREDENTIAL_SERVICES,
+  MODEL_CREDENTIAL_SERVICES,
   type ProviderCredentials,
 } from "../../infrastructure/model/CredentialsResolver.js";
 import {
@@ -29,6 +31,8 @@ import {
   RivetCredentialsResolver,
   type CredentialsActorClient,
 } from "../../infrastructure/rivet/credentials.js";
+import { LangSmithModelTracing } from "../../infrastructure/observability/LangSmithModelTracing.js";
+import { resolveLangSmithTracingConfig } from "../tracing-config.js";
 
 const port = parsePort(process.env.PORT, 8080);
 const metricsPort = parsePort(process.env.RIVETKIT_METRICS_PORT, 9464);
@@ -37,6 +41,21 @@ configureRivetSubmissionPolicy({
   resourceCeilings: resolveServerResourceLimits(process.env),
 });
 const modelConfig = resolveDeploymentModelConfig(process.env);
+const tracingConfig = resolveLangSmithTracingConfig(process.env);
+const credentialServices = tracingConfig.enabled
+  ? CREDENTIAL_SERVICES
+  : MODEL_CREDENTIAL_SERVICES;
+let tracingCredentials: ProviderCredentials = {};
+const tracing = new LangSmithModelTracing(() =>
+  resolveLangSmithTracingConfig({
+    ...process.env,
+    OPENAI_API_KEY: tracingCredentials.openai ?? process.env.OPENAI_API_KEY,
+    ANTHROPIC_API_KEY:
+      tracingCredentials.anthropic ?? process.env.ANTHROPIC_API_KEY,
+    LANGSMITH_API_KEY:
+      tracingCredentials.langsmith ?? process.env.LANGSMITH_API_KEY,
+  })
+);
 console.info(
   `Scrub models configured: summary=${modelConfig.defaults.summary?.provider}/${modelConfig.defaults.summary?.model}, vision=${modelConfig.defaults.vision?.provider}/${modelConfig.defaults.vision?.model}`
 );
@@ -55,12 +74,15 @@ configureRivetInference({
             environment,
             new RivetCredentialsResolver(
               () => context.client() as CredentialsActorClient,
-              () => process.env.RIVET_TOKEN
-            )
+              () => process.env.RIVET_TOKEN,
+              credentialServices
+            ),
+            credentialServices
           );
     let credentials: ProviderCredentials = await resolver.resolve(
       context.abortSignal
     );
+    tracingCredentials = credentials;
     return createDeploymentModelGateway(
       () => ({
         ...process.env,
@@ -69,7 +91,9 @@ configureRivetInference({
       }),
       async (operation) => {
         credentials = await resolver.resolve(operation.signal);
-      }
+        tracingCredentials = credentials;
+      },
+      tracing
     );
   },
 });
@@ -109,16 +133,52 @@ const app = createNodeHttpServer((request) =>
 );
 const metrics = createMetricsServer(() => registry.routes.prometheusMetrics());
 
+let closing: Promise<void> | undefined;
+const close = () =>
+  (closing ??= (async () => {
+    const stopped = [app, metrics].map(
+      (server) =>
+        new Promise<void>((resolveClosed) =>
+          server.close(() => resolveClosed())
+        )
+    );
+    const force = setTimeout(() => {
+      app.closeAllConnections();
+      metrics.closeAllConnections();
+    }, 5000);
+    force.unref();
+    try {
+      const results = await Promise.allSettled([
+        mcp.close(),
+        registry.shutdown(),
+        ...stopped,
+      ]);
+      if (results.some((result) => result.status === "rejected"))
+        throw new Error("Scrub runner shutdown failed");
+    } finally {
+      clearTimeout(force);
+      await tracing.flush();
+    }
+  })());
+let failed = false;
 const fail = () => {
+  if (failed) return;
+  failed = true;
   console.error("Scrub runner HTTP server failed to start");
-  app.close();
-  metrics.close();
-  void Promise.all([mcp.close(), registry.shutdown()]).finally(() =>
-    process.exit(1)
-  );
+  process.exitCode = 1;
+  void close().catch(() => {
+    process.exitCode = 1;
+  });
 };
 app.on("error", fail);
 metrics.on("error", fail);
+for (const signal of ["SIGINT", "SIGTERM"] as const)
+  process.once(signal, () => {
+    if (!failed) process.exitCode = signal === "SIGINT" ? 130 : 143;
+    void close().catch(() => {
+      process.exitCode = 1;
+    });
+  });
 
 registry.start();
 app.listen(port, "0.0.0.0", () => {

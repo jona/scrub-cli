@@ -275,6 +275,12 @@ export async function runModelInference(input: InferenceOperation): Promise<{
           {
             ...request,
             maxOutputTokens: pending.outputTokens,
+            invocation: {
+              step: key,
+              callIndex: checkpoint.calls,
+              repairAttempt: pending.repairAttempts,
+              outputRetry: pending.outputRetries,
+            },
             ...(pending.repairAttempts
               ? {
                   prompt:
