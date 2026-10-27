@@ -10,6 +10,11 @@ import {
   resultArtifacts,
 } from "../../src/application/artifact-io.js";
 import type { StructuredModelGateway } from "../../src/application/model.js";
+import { formatStructuredModelPrompt } from "../../src/application/model.js";
+import {
+  buildSummaryPrompt,
+  SUMMARY_SCHEMA,
+} from "../../src/core/summary-template.js";
 import type {
   ArtifactRef,
   ArtifactStorage,
@@ -753,6 +758,25 @@ describe("full video pipeline integration", () => {
     it(`invalidates old summary and source notes after changed ${changedStage} repair without resetting chargeable calls`, async () => {
       const f = fullPipelineFixture();
       f.settings.inference!.limits.chunkCharacters = 2000;
+      f.settings.inference!.limits.maxSummaryInputCharacters =
+        formatStructuredModelPrompt({
+          prompt: buildSummaryPrompt(
+            {
+              contentId: "dQw4w9WgXcQ",
+              title: "Notes dQw4w9WgXcQ",
+              description: "",
+              duration: 30,
+              thumbnailUrl: "",
+              source: "YouTube",
+              uploadDate: "2026-01-01",
+              url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            },
+            "",
+            [],
+            { consolidatedVisuals: true }
+          ),
+          schema: SUMMARY_SCHEMA,
+        }).length + 2256;
       f.transcriber.transcribe.mockResolvedValue({
         fullText: "Original transcript evidence. ".repeat(200),
         segments: [],
@@ -839,6 +863,68 @@ describe("full video pipeline integration", () => {
       );
     });
   }
+
+  it("preserves pending frame repair budgets while changed transcription invalidates dependent inference", async () => {
+    const f = fullPipelineFixture();
+    const original = await f.run();
+    const completed = (await f.runs.get())!;
+    const visionKey = Object.keys(completed.checkpoints.inference!.steps).find(
+      (key) => key.startsWith("vision:")
+    )!;
+    const visionArtifact =
+      completed.checkpoints.inference!.steps[visionKey].artifact;
+    const visionPending = {
+      outputTokens: f.settings.inference!.limits.maxVisionOutputTokens,
+      outputRetries: 0,
+      repairAttempts: f.settings.inference!.limits.repairAttempts,
+    };
+    await f.runs.update((record) => ({
+      ...record!,
+      checkpoints: {
+        ...record!.checkpoints,
+        inference: {
+          ...record!.checkpoints.inference!,
+          pending: {
+            [visionKey]: visionPending,
+            "chunk:0": { ...visionPending, exhausted: "invalid_output" },
+            "reduce:0:0": { ...visionPending, exhausted: "output_limit" },
+            "summary:final": { ...visionPending, exhausted: "output_limit" },
+          },
+        },
+      },
+    }));
+    f.missing.add(original.transcript.id);
+    f.missing.add(visionArtifact.id);
+    f.transcriber.transcribe.mockResolvedValueOnce({
+      fullText: "Changed transcript evidence.",
+      segments: [],
+      language: "en",
+      duration: 30,
+      source: "test-provider",
+    });
+    f.generate.mockRejectedValueOnce(
+      new PipelineError("invalid_model_output", "Invalid frame response")
+    );
+    const paidCalls = f.generate.mock.calls.length;
+    await expect(f.run()).rejects.toMatchObject({
+      code: "invalid_model_output",
+    });
+    expect(f.generate).toHaveBeenCalledTimes(paidCalls + 1);
+    expect(f.generate.mock.calls.at(-1)![0].schemaName).toBe(
+      "ScrubFrameAnalysis"
+    );
+    const failed = (await f.runs.get())!;
+    expect(failed.checkpoints.inference!.calls).toBe(paidCalls + 1);
+    expect(failed.checkpoints.inference!.pending).toEqual({
+      [visionKey]: { ...visionPending, exhausted: "invalid_output" },
+    });
+    expect(
+      failed.checkpoints.inference!.steps["summary:final"]
+    ).toBeUndefined();
+    expect(f.transcriber.transcribe).toHaveBeenCalledTimes(2);
+    expect(f.media.extractFrames).toHaveBeenCalledOnce();
+    expect(f.media.acquire).toHaveBeenCalledOnce();
+  });
 
   it("preserves the model budget when changed acquisition invalidates completed inference", async () => {
     const f = fullPipelineFixture();

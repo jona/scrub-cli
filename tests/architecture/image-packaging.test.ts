@@ -147,6 +147,7 @@ describe("deployment image packaging boundary", () => {
       SCRUB_SUMMARY_MODEL: "custom-summary-model",
       SCRUB_VISION_MODEL: "custom-vision-model",
       SCRUB_INFERENCE_LIMITS: '{"chunkCharacters":16000,"maxModelCalls":7}',
+      SCRUB_MODEL_TIMEOUT_MS: "900000",
     });
     const resolved = helper.parseRivetBakeProfile(JSON.stringify(bake));
     expect(resolved.args).toEqual(bake.target["rivet-api"].args);
@@ -159,6 +160,10 @@ describe("deployment image packaging boundary", () => {
       'ARG SCRUB_SUMMARY_MODEL="custom-summary-model"'
     );
     expect(generated).toContain('ARG SCRUB_VISION_MODEL="custom-vision-model"');
+    expect(generated).toContain('ARG SCRUB_MODEL_TIMEOUT_MS="900000"');
+    expect(generated).toContain(
+      "ENV SCRUB_MODEL_TIMEOUT_MS=${SCRUB_MODEL_TIMEOUT_MS}"
+    );
     expect(generated).toContain(
       'ARG SCRUB_INFERENCE_LIMITS="{\\"chunkCharacters\\":16000,\\"maxModelCalls\\":7}"'
     );

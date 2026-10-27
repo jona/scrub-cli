@@ -153,6 +153,7 @@ checks configured credentials and allowed selections before media work begins.
 | `SCRUB_OPENAI_MODELS`, `SCRUB_ANTHROPIC_MODELS`     | Comma-separated model allowlists                                                              |
 | `SCRUB_OPENAI_BASE_URL`, `SCRUB_ANTHROPIC_BASE_URL` | Trusted deployment endpoint overrides                                                         |
 | `SCRUB_INFERENCE_LIMITS`                            | JSON object overriding bounded inference limits                                               |
+| `SCRUB_MODEL_TIMEOUT_MS`                            | Runtime deadline per model call, 1–1,800,000 ms; default 600,000 ms (10 minutes)              |
 
 Both stages default to `openai`: summaries use `gpt-6.1-sol` and vision uses
 `gpt-6.1-terra`. The default OpenAI allowlist includes these models and
@@ -161,7 +162,47 @@ Both stages default to `openai`: summaries use `gpt-6.1-sol` and vision uses
 corresponding allowlist. CLI flags override these public defaults. Library callers
 inject a `StructuredModelGateway`; portable code imports no provider SDK.
 
-Provider/model selectors, allowlists, and inference budgets are also Docker build arguments. For example,
+`SCRUB_INFERENCE_LIMITS` sets the runtime's defaults and request ceilings for
+API/MCP jobs. Requests may lower individual budgets, but cannot increase them
+above the configured server policy. The CLI loads the same defaults from its
+environment. These settings are also available to library callers through the
+injected inference settings; the shared pipeline reads no environment variables.
+
+| Budget                          | Default | Behavior                                                                                                                                                                     |
+| ------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chunkCharacters`               | 48,000  | Maximum source characters per notes/compression chunk; source text is split without truncation                                                                               |
+| `maxSummaryInputCharacters`     | 64,000  | Maximum final summary user-prompt characters, including template, metadata, evidence, JSON schema, and repair instructions; a character estimate, not a provider token count |
+| `sourceNoteTargetCharacters`    | 9,000   | Soft notes target, reduced to fit the available input budget; oversized valid notes are accepted and compressed if needed                                                    |
+| `initialSourceNoteOutputTokens` | 8,192   | Starting generation allowance for a notes/compression call                                                                                                                   |
+| `initialOutputTokens`           | 16,384  | Starting generation allowance for a final summary                                                                                                                            |
+| `maxOutputTokens`               | 32,768  | Hard ceiling for notes and summary generation; lower ceilings also lower both starting allowances                                                                            |
+| `outputTokenRetries`            | 2       | Maximum allowance increases per paid step when the provider reports output truncation; each increase doubles the allowance up to the hard ceiling                            |
+| `repairAttempts`                | 1       | Additional attempts for structurally invalid model output                                                                                                                    |
+| `maxModelCalls`                 | 128     | Total paid attempts per video, including notes, vision, repairs, and token recovery                                                                                          |
+
+For example, this allows summaries to start at 16,384 tokens and recover up to
+32,768 tokens, with a fifteen-minute deadline per call:
+
+```bash
+export SCRUB_MODEL_TIMEOUT_MS=900000
+export SCRUB_INFERENCE_LIMITS='{"initialOutputTokens":16384,"maxOutputTokens":32768,"outputTokenRetries":2}'
+```
+
+Valid notes have no fixed 12,000-character rejection threshold. When their
+combined summary prompt exceeds the input budget, the pipeline compresses all
+notes in bounded chunks until the prompt fits. It stops if compression does not
+shrink the input or the total call budget is exhausted. It never trims source
+text to make a prompt fit. Recovery counters and increased allowances are saved
+before another paid call, so restarting a worker preserves the budgets and
+completed steps. Previously accepted jobs retain their captured settings.
+
+Native tools keep complete, size-bounded stdout for machine-readable results.
+Diagnostic stderr and artifact-producing command stdout retain bounded tails;
+callbacks stream the full diagnostics. Progress output cannot exhaust an
+ever-growing log buffer or fail an otherwise successful download. Deadlines,
+cancellation, metadata size checks, and media/artifact size limits remain active.
+
+Provider/model selectors, allowlists, inference budgets, and the model-call deadline are also Docker build arguments. For example,
 `--build-arg SCRUB_VISION_PROVIDER=anthropic --build-arg SCRUB_VISION_MODEL=claude-sonnet-5-5`
 selects Anthropic for vision. Provider keys are never build arguments.
 

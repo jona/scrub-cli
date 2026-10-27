@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createServer, type ServerResponse } from "node:http";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   Client,
@@ -13,6 +14,7 @@ import {
   createNativeCliFixture,
   FIRST_VIDEO,
   PLAYLIST_URL,
+  readJson,
   SECOND_VIDEO,
 } from "../helpers/native-cli-fixture.js";
 
@@ -84,8 +86,8 @@ const summary = () => ({
 });
 
 /** Real provider SDK HTTP, with controlled completion so background lifetime is observable. */
-async function modelServer() {
-  const calls: Array<{ model: string; images: number }> = [];
+async function modelServer(options: { recoverAt?: number } = {}) {
+  const calls: Array<{ model: string; images: number; tokens: number }> = [];
   const errors: string[] = [];
   const pending = new Map<ServerResponse, () => void>();
   let paused = true;
@@ -128,7 +130,11 @@ async function modelServer() {
         expect(parts[0].text).toContain("ScrubSummary");
         expect(images).toHaveLength(0);
       }
-      calls.push({ model: body.model, images: images.length });
+      calls.push({
+        model: body.model,
+        images: images.length,
+        tokens: body.max_completion_tokens,
+      });
       const respond = () => {
         pending.delete(response);
         if (response.destroyed || response.writableEnded) return;
@@ -140,6 +146,9 @@ async function modelServer() {
                 visualType: "diagram",
               }
             : summary();
+        const exhausted =
+          options.recoverAt !== undefined &&
+          body.max_completion_tokens < options.recoverAt;
         response.writeHead(200, { "Content-Type": "application/json" });
         response.end(
           JSON.stringify({
@@ -150,8 +159,11 @@ async function modelServer() {
             choices: [
               {
                 index: 0,
-                message: { role: "assistant", content: JSON.stringify(value) },
-                finish_reason: "stop",
+                message: {
+                  role: "assistant",
+                  content: exhausted ? '{"tldr":' : JSON.stringify(value),
+                },
+                finish_reason: exhausted ? "length" : "stop",
               },
             ],
             usage: {
@@ -199,7 +211,8 @@ async function modelServer() {
 async function apiProcess(
   fixture: Awaited<ReturnType<typeof createNativeCliFixture>>,
   providerUrl: string,
-  withKey = true
+  withKey = true,
+  environment: Record<string, string> = {}
 ) {
   const bin = join(fixture.root, "fake tools");
   const child = spawn(
@@ -233,6 +246,7 @@ async function apiProcess(
         SCRUB_FIXTURE_LOG: join(fixture.root, "tools.jsonl"),
         SCRUB_FIXTURE_PLAYLIST: join(fixture.root, "playlist.json"),
         TSX_TSCONFIG_PATH: resolve("tsconfig.json"),
+        ...environment,
       },
     }
   );
@@ -319,6 +333,145 @@ async function assertNoStoredKeys(directory: string): Promise<void> {
 }
 
 describe("standalone API process with persistent native jobs", () => {
+  const recoveryLimits = JSON.stringify({
+    initialOutputTokens: 512,
+    maxOutputTokens: 2048,
+    outputTokenRetries: 2,
+  });
+
+  it("recovers truncated model output through the real CLI with durable charge accounting", async () => {
+    const fixture = await createNativeCliFixture();
+    cleanup.push(() => fixture.dispose());
+    const provider = await modelServer({ recoverAt: 2048 });
+    provider.release();
+    const entry = await fixture.file(
+      "budget-cli.mjs",
+      `
+      Object.assign(process.env,${JSON.stringify({
+        OPENAI_API_KEY: modelKey,
+        SCRUB_OPENAI_BASE_URL: provider.url,
+        SCRUB_OPENAI_MODELS: "fixture-summary,fixture-vision",
+        SCRUB_SUMMARY_MODEL: "fixture-summary",
+        SCRUB_VISION_MODEL: "fixture-vision",
+        SCRUB_INFERENCE_LIMITS: recoveryLimits,
+      })});
+      await import(${JSON.stringify(pathToFileURL(resolve("src/deployments/local/cli.ts")).href)});
+    `
+    );
+    const result = await fixture.run(
+      [
+        "youtube",
+        `https://youtu.be/${FIRST_VIDEO}`,
+        "--summarize",
+        "--no-visuals",
+      ],
+      12_000,
+      entry
+    );
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    expect(provider.calls.map((call) => call.tokens)).toEqual([
+      512, 1024, 2048,
+    ]);
+    expect(
+      provider.calls.every(
+        (call) => call.model === "fixture-summary" && call.images === 0
+      )
+    ).toBe(true);
+    expect(provider.errors).toEqual([]);
+    const runs = await readdir(join(fixture.cache, "runs-v2"));
+    expect(runs).toHaveLength(1);
+    expect(
+      await readJson(join(fixture.cache, "runs-v2", runs[0]))
+    ).toMatchObject({
+      status: "completed",
+      checkpoints: { inference: { calls: 3 } },
+    });
+    const index = await readJson<{
+      media: Record<string, { outputPath: string }>;
+    }>(join(fixture.output, "index.json"));
+    const directory = join(fixture.output, index.media[FIRST_VIDEO].outputPath);
+    expect(
+      await readFile(join(directory, "output/summary.md"), "utf8")
+    ).toContain("Durable fixture results");
+    expect(
+      await readJson(join(directory, "inference/model_usage.json"))
+    ).toMatchObject({ calls: 3 });
+    expect(result.stdout + result.stderr).not.toContain(modelKey);
+  }, 30_000);
+
+  it("enforces API ceilings before work and persists the same bounded model recovery across restart", async () => {
+    const fixture = await createNativeCliFixture();
+    cleanup.push(() => fixture.dispose());
+    const provider = await modelServer({ recoverAt: 2048 });
+    provider.release();
+    const environment = { SCRUB_INFERENCE_LIMITS: recoveryLimits };
+    const host = await apiProcess(fixture, provider.url, true, environment);
+    const url = `https://youtu.be/${FIRST_VIDEO}`;
+    await host.json(
+      "/jobs",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          url,
+          settings: {
+            skipVisuals: true,
+            inference: { limits: { maxOutputTokens: 4096 } },
+          },
+        }),
+      },
+      400
+    );
+    expect(provider.calls).toEqual([]);
+    expect(await fixture.calls()).toEqual([]);
+    const accepted = await host.json<JobSnapshot>(
+      "/jobs",
+      {
+        method: "POST",
+        body: JSON.stringify({ url, settings: { skipVisuals: true } }),
+      },
+      202
+    );
+    const jobPath = `/jobs/${accepted.id}`;
+    expect(
+      await until(() => host.json<JobSnapshot>(jobPath), terminal)
+    ).toMatchObject({ status: "completed", completed: 1 });
+    expect(provider.calls.map((call) => call.tokens)).toEqual([
+      512, 1024, 2048,
+    ]);
+    expect(
+      provider.calls.every(
+        (call) => call.model === "fixture-summary" && call.images === 0
+      )
+    ).toBe(true);
+    const page = await host.json<{ items: JobVideo[] }>(`${jobPath}/results`);
+    const video = page.items[0];
+    expect(video.result?.frames).toEqual([]);
+    const artifact = (id: string) =>
+      `${jobPath}/videos/${video.videoId}/artifacts/${id}`;
+    const refs = video.result!.inference!;
+    expect(
+      await (await host.request(artifact(refs.markdown.id))).text()
+    ).toContain("Durable fixture results");
+    expect(await host.json(artifact(refs.modelUsage.id))).toMatchObject({
+      calls: 3,
+    });
+    const nativeCalls = (await fixture.calls()).length;
+    await host.close();
+    const resumed = await apiProcess(fixture, provider.url, false, environment);
+    expect(await resumed.json<JobSnapshot>(jobPath)).toMatchObject({
+      status: "completed",
+      completed: 1,
+    });
+    expect(await resumed.json(artifact(refs.modelUsage.id))).toMatchObject({
+      calls: 3,
+    });
+    expect(provider.calls).toHaveLength(3);
+    expect((await fixture.calls()).length).toBe(nativeCalls);
+    expect(provider.errors).toEqual([]);
+    expect(host.output() + resumed.output()).not.toContain(modelKey);
+    await assertNoStoredKeys(join(fixture.root, "persistent data"));
+  }, 30_000);
+
   it("runs real full work across HTTP/MCP, cancellation/retry, disconnect and keyless restart", async () => {
     const fixture = await createNativeCliFixture();
     cleanup.push(() => fixture.dispose());

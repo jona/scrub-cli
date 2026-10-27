@@ -29,6 +29,17 @@ const OPENAI_DEFAULT_ALLOWLIST = [
 export function resolveDeploymentModelConfig(
   env: Record<string, string | undefined>
 ): DeploymentModelConfig {
+  let timeoutMs = 600_000;
+  if (env.SCRUB_MODEL_TIMEOUT_MS !== undefined) {
+    const value = /^\d+$/.test(env.SCRUB_MODEL_TIMEOUT_MS)
+      ? Number(env.SCRUB_MODEL_TIMEOUT_MS)
+      : NaN;
+    if (!Number.isSafeInteger(value) || value < 1 || value > 1_800_000)
+      throw new Error(
+        "SCRUB_MODEL_TIMEOUT_MS must be an integer from 1 to 1800000"
+      );
+    timeoutMs = value;
+  }
   const models = (name: string, fallback: readonly string[]): string[] => {
     const values =
       env[name] === undefined
@@ -49,6 +60,7 @@ export function resolveDeploymentModelConfig(
       name: "openai",
       protocol: "openai-compatible",
       apiKey: env.OPENAI_API_KEY,
+      timeoutMs,
       allowedModels: models("SCRUB_OPENAI_MODELS", OPENAI_DEFAULT_ALLOWLIST),
       ...(env.SCRUB_OPENAI_BASE_URL
         ? { baseURL: env.SCRUB_OPENAI_BASE_URL }
@@ -58,6 +70,7 @@ export function resolveDeploymentModelConfig(
       name: "anthropic",
       protocol: "anthropic",
       apiKey: env.ANTHROPIC_API_KEY,
+      timeoutMs,
       allowedModels: models("SCRUB_ANTHROPIC_MODELS", ["claude-sonnet-5-5"]),
       ...(env.SCRUB_ANTHROPIC_BASE_URL
         ? { baseURL: env.SCRUB_ANTHROPIC_BASE_URL }

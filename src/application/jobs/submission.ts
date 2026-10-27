@@ -67,6 +67,21 @@ export function normalizeJobSubmission(value: unknown): JobSubmission {
   };
 }
 
+/** Omitted or identical intent must not rewrite a previously accepted settings snapshot. */
+function changesCapturedValue(requested: unknown, captured: unknown): boolean {
+  if (requested === undefined) return false;
+  if (requested && typeof requested === "object" && !Array.isArray(requested)) {
+    const previous =
+      captured && typeof captured === "object"
+        ? (captured as Record<string, unknown>)
+        : {};
+    return Object.entries(requested).some(([name, value]) =>
+      changesCapturedValue(value, previous[name])
+    );
+  }
+  return requested !== captured;
+}
+
 /** Deployment-selected defaults/ceilings shared by every job entry point. */
 export class SubmissionPolicy {
   private readonly options: SubmissionPolicyOptions;
@@ -87,7 +102,7 @@ export class SubmissionPolicy {
   ): NormalizedJobSubmission {
     const request = normalizeJobSubmission(input);
     const settings = this.resolveSettings(request.settings, existing?.settings);
-    return normalizeSubmission({
+    const normalized = normalizeSubmission({
       ...request,
       concurrency:
         request.concurrency ??
@@ -95,6 +110,7 @@ export class SubmissionPolicy {
         this.options.requestDefault,
       settings,
     });
+    return { ...normalized, settings };
   }
 
   resolveSettings(
@@ -107,19 +123,28 @@ export class SubmissionPolicy {
     const requested = parsed.data?.inference;
     const defaults = existing?.inference ?? this.options.inferenceDefaults;
     const inference =
-      existing && requested === undefined
+      existing && !changesCapturedValue(requested, existing.inference)
         ? existing.inference
         : resolveInferenceSettings({
             ...defaults,
             ...requested,
-            limits: { ...defaults.limits, ...requested?.limits },
+            limits: {
+              ...this.options.inferenceDefaults.limits,
+              ...defaults.limits,
+              ...requested?.limits,
+            },
           });
-    if (!existing && inference) {
+    if (inference) {
       const ceiling = resolveInferenceSettings(
         this.options.inferenceDefaults
       )!.limits;
       for (const [name, maximum] of Object.entries(ceiling))
-        if (inference.limits[name as keyof typeof ceiling] > maximum)
+        if (
+          inference.limits[name as keyof typeof ceiling] > maximum &&
+          (!existing ||
+            inference.limits[name as keyof typeof ceiling] !==
+              existing.inference?.limits[name as keyof typeof ceiling])
+        )
           throw new PipelineError(
             "invalid_input",
             "Inference limits exceed deployment policy"
@@ -133,10 +158,18 @@ export class SubmissionPolicy {
       },
       ...(inference === undefined ? {} : { inference }),
     });
+    // resolveSettings also resolves inference; retain historical snapshots whose
+    // older limit shape must remain unchanged for their idempotency fingerprint.
+    if (inference === undefined) delete settings.inference;
+    else settings.inference = inference;
     const ceiling = this.options.resourceCeilings!;
     for (const [name, limit] of Object.entries(settings.limits)) {
       const maximum = ceiling[name as keyof typeof ceiling];
-      if (maximum !== undefined && limit > maximum && !existing)
+      if (
+        maximum !== undefined &&
+        limit > maximum &&
+        (!existing || limit !== existing.limits[name as keyof typeof ceiling])
+      )
         throw new PipelineError(
           "resource_limit",
           `Requested ${name} exceeds server policy`

@@ -17,6 +17,16 @@ describe("inference settings boundaries", () => {
     { summary: { provider: "openai", model: "allowed-summary" } },
     { vision: { provider: "anthropic", model: "allowed-vision" } },
     { includeFullTranscript: true, limits: { maxModelCalls: 3 } },
+    {
+      limits: {
+        initialOutputTokens: 4096,
+        maxOutputTokens: 8192,
+        sourceNoteTargetCharacters: 3000,
+        initialSourceNoteOutputTokens: 2048,
+        maxSummaryInputCharacters: 32_000,
+        outputTokenRetries: 1,
+      },
+    },
   ])(
     "preserves partial request intent without resolved defaults: %j",
     (input) => {
@@ -33,6 +43,38 @@ describe("inference settings boundaries", () => {
     });
     expect(() => resolveInferenceSettings({ mode: "full" })).toThrow(
       "Full processing requires"
+    );
+    expect(DEFAULT_INFERENCE_LIMITS).toMatchObject({
+      initialOutputTokens: 16_384,
+      maxOutputTokens: 32_768,
+      sourceNoteTargetCharacters: 9000,
+      initialSourceNoteOutputTokens: 8192,
+      maxSummaryInputCharacters: 64_000,
+      outputTokenRetries: 2,
+    });
+  });
+
+  it("clips initial and source-note budgets to an explicitly lower hard ceiling", () => {
+    const settings = resolveInferenceSettings({
+      limits: { maxOutputTokens: 1024 },
+    });
+    expect(settings?.limits).toMatchObject({
+      initialOutputTokens: 1024,
+      maxOutputTokens: 1024,
+      initialSourceNoteOutputTokens: 1024,
+    });
+  });
+
+  it.each([
+    { initialOutputTokens: 32_769 },
+    { initialSourceNoteOutputTokens: 32_769 },
+    { sourceNoteTargetCharacters: 200_001 },
+    { maxSummaryInputCharacters: 512_001 },
+    { outputTokenRetries: 5 },
+    { outputTokenRetries: 1.5 },
+  ])("rejects unbounded adaptive inference settings: %j", (limits) => {
+    expect(() => validateInferenceSettingsInput({ limits })).toThrow(
+      "Invalid inference settings"
     );
   });
 });
@@ -58,6 +100,111 @@ describe("deployment model registry", () => {
     });
     expect(JSON.stringify(config.defaults)).not.toContain("test-only");
   });
+
+  it("supplies a ten-minute provider deadline when no runtime override is set", () => {
+    const config = resolveDeploymentModelConfig({});
+    for (const provider of config.providers)
+      expect(provider.timeoutMs).toBe(600_000);
+  });
+
+  it.each(["1", "600000", "1800000"])(
+    "applies runtime model timeout %s to both providers without changing persisted settings",
+    (timeout) => {
+      const environment = Object.freeze({ SCRUB_MODEL_TIMEOUT_MS: timeout });
+      const config = resolveDeploymentModelConfig(environment);
+      expect(
+        config.providers.map(({ name, timeoutMs }) => ({ name, timeoutMs }))
+      ).toEqual([
+        { name: "openai", timeoutMs: Number(timeout) },
+        { name: "anthropic", timeoutMs: Number(timeout) },
+      ]);
+      expect(config.defaults).toEqual(
+        resolveDeploymentModelConfig({}).defaults
+      );
+      expect(environment.SCRUB_MODEL_TIMEOUT_MS).toBe(timeout);
+    }
+  );
+
+  it.each([
+    "",
+    " ",
+    "0",
+    "-1",
+    "+1",
+    "1800001",
+    "600000.0",
+    "1.5",
+    "1e3",
+    "0x10",
+    "1000ms",
+    "1000 ",
+    " 1000",
+    "NaN",
+    "Infinity",
+    "9007199254740992",
+    "99999999999999999999999999999999999999999",
+  ])("rejects invalid runtime model timeout %j", (timeout) => {
+    expect(() =>
+      resolveDeploymentModelConfig({ SCRUB_MODEL_TIMEOUT_MS: timeout })
+    ).toThrow("SCRUB_MODEL_TIMEOUT_MS must be an integer from 1 to 1800000");
+  });
+
+  it.each(["openai", "anthropic"] as const)(
+    "uses the runtime override for the actual %s model call deadline",
+    async (provider) => {
+      const timeout = vi.spyOn(AbortSignal, "timeout");
+      const response =
+        provider === "openai"
+          ? {
+              choices: [
+                { message: { content: '{"ok":true}' }, finish_reason: "stop" },
+              ],
+            }
+          : {
+              content: [{ type: "text", text: '{"ok":true}' }],
+              stop_reason: "end_turn",
+            };
+      const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify(response), {
+          headers: { "content-type": "application/json" },
+        })
+      );
+      try {
+        const gateway = createDeploymentModelGateway(() => ({
+          SCRUB_MODEL_TIMEOUT_MS: "600000",
+          OPENAI_API_KEY: "test-only-openai-key",
+          ANTHROPIC_API_KEY: "test-only-anthropic-key",
+        }));
+        const result = await gateway.generate(
+          {
+            selection: {
+              provider,
+              model:
+                provider === "openai" ? "gpt-6.1-sol" : "claude-sonnet-5-5",
+            },
+            system: "Fixture system",
+            prompt: "Fixture prompt",
+            schema: { type: "object" },
+            schemaName: "Fixture",
+            maxOutputTokens: 512,
+          },
+          {
+            runId: "test",
+            attemptId: "1",
+            signal: new AbortController().signal,
+            now: Date.now,
+            emit: () => undefined,
+          }
+        );
+        expect(result.value).toEqual({ ok: true });
+        expect(timeout).toHaveBeenCalledWith(600000);
+        expect(fetch).toHaveBeenCalledOnce();
+      } finally {
+        fetch.mockRestore();
+        timeout.mockRestore();
+      }
+    }
+  );
   it("allows only server-registered model selections and bounded inference settings", () => {
     expect(
       resolveDeploymentModelConfig({ SCRUB_SUMMARY_PROVIDER: "anthropic" })

@@ -61,6 +61,14 @@ export class PipelineError extends Error {
   }
 }
 
+/** The model stopped at its requested token budget, so bounded escalation is possible. */
+export class ModelOutputLimitError extends PipelineError {
+  constructor() {
+    super("resource_limit", "Model output reached its token limit");
+    this.name = "ModelOutputLimitError";
+  }
+}
+
 export function asPipelineError(
   error: unknown,
   options: PipelineErrorOptions = {}

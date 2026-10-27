@@ -183,6 +183,11 @@ export async function runVideoPipeline(
     keepVision = false
   ): RunRecord["checkpoints"]["inference"] => {
     const previous = record.checkpoints.inference;
+    const visionPending = keepVision
+      ? Object.entries(previous?.pending ?? {}).filter(([key]) =>
+          key.startsWith("vision:")
+        )
+      : [];
     return previous
       ? {
           calls: previous.calls,
@@ -193,6 +198,9 @@ export async function runVideoPipeline(
                 )
               )
             : {},
+          ...(visionPending.length
+            ? { pending: Object.fromEntries(visionPending) }
+            : {}),
         }
       : undefined;
   };
