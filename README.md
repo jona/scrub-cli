@@ -692,11 +692,16 @@ RIVET_PUBLIC_URL=https://app.example.invalid
 The admin token belongs only in server code and deploy pipelines. Exclude it from
 source control, browser bundles, image layers, command arguments, and logs.
 Rivet SDK integrations use `createClient({ endpoint: process.env.RIVET_ENDPOINT,
-token: process.env.RIVET_TOKEN })` and the typed registry. The existing `scrub`
-document actor still provides `buildPrompt`, `renderSummary`, and `getArtifacts`.
+token: process.env.RIVET_TOKEN })` and the typed registry. Background requests use
+the request and video actors through the shared job services.
 Public integrations access background jobs through the HTTP routes. Repository
 source compositions also use the internal `RivetJobGateway` server adapter; it is
 not a public package export.
+
+Earlier manual document-actor integrations should migrate to the job API. The
+superseded `scrub` document actor and `ArtifactService` API have been retired;
+standalone prompt assembly and summary rendering remain available through the
+CLI and portable library functions.
 
 After building and storing the endpoint/token in ignored `.env.rivet.local`, the
 server-side helper submits work and checks it later:

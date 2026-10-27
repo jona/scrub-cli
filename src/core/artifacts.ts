@@ -7,7 +7,7 @@ import {
 import type { MediaMetadata } from "./models.js";
 import type { RenderSummaryOptions } from "./summary-template.js";
 
-// Keep two retained artifacts and action responses comfortably bounded.
+// Bound standalone in-memory prompt/render inputs and outputs.
 export const MAX_INPUT_BYTES = 256 * 1024;
 export const MAX_ARTIFACT_BYTES = 384 * 1024;
 
@@ -228,12 +228,6 @@ export interface PromptArtifact {
 export interface RenderedArtifact {
   metadata: MediaMetadata;
   markdown: string;
-}
-
-export interface ArtifactState {
-  revision: number;
-  prompt: PromptArtifact | null;
-  rendered: RenderedArtifact | null;
 }
 
 export class ArtifactInputError extends Error {

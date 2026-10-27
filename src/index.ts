@@ -13,8 +13,6 @@ export * from "./application/model.js";
 export * from "./application/inference.js";
 export * from "./core/inference.js";
 export * from "./application/artifact-io.js";
-export * from "./application/ArtifactService.js";
-export type * from "./application/ports/ArtifactRepository.js";
 
 export * from "./application/playlist.js";
 export * from "./application/stages.js";
