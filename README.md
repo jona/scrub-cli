@@ -257,10 +257,8 @@ touch .env.models.local
 chmod 600 .env.models.local
 ```
 
-Edit that file locally with only these fields, filling in the provider keys you
-intend to use:
-
-Set `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` in that file. Add
+Set `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` in that file for the providers you
+intend to use. Add
 `LANGSMITH_API_KEY` when enabling LangSmith tracing.
 
 After the image rollout, the provisioning command loads server/admin settings from
@@ -287,9 +285,10 @@ is not an encryption scheme. Credential-store administrators and Inspector acces
 are trusted with stored keys. Jobs, model prompts, result artifacts, and browser
 clients never receive those keys.
 
-Default inference limits are 48,000 characters per input chunk, 8,192 summary
-output tokens, 2,048 vision output tokens, 8 MiB per image, 128 model calls per
-run, and one repair attempt for an invalid structured response. Long transcripts
+Default inference limits are 48,000 characters per source chunk, a 16,384-token
+starting summary allowance with a 32,768-token recovery ceiling, 2,048 vision
+output tokens, 8 MiB per image, 128 model calls per run, and one repair attempt
+for an invalid structured response. Long transcripts
 are split and reduced rather than silently truncated. Transcript text, frame OCR,
 and metadata are treated as untrusted source material in prompts; model output
 must pass bounded schema validation before publication.
