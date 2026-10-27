@@ -5,8 +5,22 @@ import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 
 const MAX_INPUT_BYTES = 20 * 1024;
+const credentialNames = [
+  ["OPENAI_API_KEY", "openai"],
+  ["ANTHROPIC_API_KEY", "anthropic"],
+  ["LANGSMITH_API_KEY", "langsmith"],
+];
+// These deployment settings may share the protected file but are never stored as secrets.
+const publicTracingNames = [
+  "LANGSMITH_TRACING",
+  "LANGSMITH_PROJECT",
+  "LANGSMITH_ENDPOINT",
+  "LANGSMITH_WORKSPACE_ID",
+  "SCRUB_LANGSMITH_CAPTURE_CONTENT",
+  "SCRUB_LANGSMITH_TIMEOUT_MS",
+];
 const usage =
-  "Usage: node --env-file=.env.rivet.local scripts/rivet/credentials.mjs list | save [--input .env.models.local|-] | remove <openai|anthropic>";
+  "Usage: node --env-file=.env.rivet.local scripts/rivet/credentials.mjs list | save [--input .env.models.local|-] | remove <openai|anthropic|langsmith>";
 
 export function parseCredentialFile(text) {
   let values;
@@ -22,17 +36,16 @@ export function parseCredentialFile(text) {
     typeof values !== "object" ||
     Array.isArray(values) ||
     Object.keys(values).some(
-      (key) => !["OPENAI_API_KEY", "ANTHROPIC_API_KEY"].includes(key)
+      (key) =>
+        !credentialNames.some(([name]) => name === key) &&
+        !publicTracingNames.includes(key)
     )
   )
     throw new Error(
-      "Credential file may contain only OPENAI_API_KEY and ANTHROPIC_API_KEY"
+      "Credential file may contain only OPENAI_API_KEY, ANTHROPIC_API_KEY, LANGSMITH_API_KEY and supported public LangSmith settings"
     );
   const entries = [];
-  for (const [name, provider] of [
-    ["OPENAI_API_KEY", "openai"],
-    ["ANTHROPIC_API_KEY", "anthropic"],
-  ]) {
+  for (const [name, provider] of credentialNames) {
     const key = values[name];
     if (key === undefined || key === "") continue;
     if (typeof key !== "string" || !/^[\x21-\x7e]{8,8192}$/.test(key))
@@ -87,7 +100,7 @@ export function parseCredentialCommand(args) {
   if (
     command === "remove" &&
     args.length === 2 &&
-    ["openai", "anthropic"].includes(flag)
+    credentialNames.some(([, provider]) => provider === flag)
   )
     return { command, provider: flag };
   if (
@@ -132,7 +145,9 @@ export async function runCredentialCommand(args) {
       JSON.stringify({
         configuredProviders: metadata
           .map((entry) => entry.provider)
-          .filter((name) => name === "openai" || name === "anthropic"),
+          .filter((name) =>
+            credentialNames.some(([, provider]) => provider === name)
+          ),
       })
     );
   } catch {

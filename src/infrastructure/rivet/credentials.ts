@@ -1,10 +1,12 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { actor, UserError } from "rivetkit";
 import { db, type RawAccess } from "rivetkit/db";
-import type {
-  CredentialsResolver,
-  ModelProvider,
-  ProviderCredentials,
+import {
+  CREDENTIAL_SERVICES,
+  MODEL_CREDENTIAL_SERVICES,
+  type CredentialsResolver,
+  type CredentialService,
+  type ProviderCredentials,
 } from "../model/CredentialsResolver.js";
 import { PipelineError } from "../../core/errors.js";
 
@@ -13,7 +15,6 @@ export const CREDENTIAL_ACTOR_KEY = ["deployment"];
 // its future, leaving 10 seconds of clock-skew headroom without extending expiry.
 const AUTH_PROOF_LIFETIME_MS = 20_000;
 const AUTH_MAX_FUTURE_MS = 30_000;
-const PROVIDERS: readonly ModelProvider[] = ["openai", "anthropic"];
 export interface CredentialProof {
   expiresAt: number;
   nonce: string;
@@ -121,15 +122,19 @@ function authorize(context: CredentialContext): void {
       code: "credential_access_denied",
     });
 }
-function provider(input: unknown): ModelProvider {
-  if (typeof input !== "string" || !PROVIDERS.includes(input as ModelProvider))
+// The historical wire/database field is named provider, including for non-model services.
+function provider(input: unknown): CredentialService {
+  if (
+    typeof input !== "string" ||
+    !CREDENTIAL_SERVICES.includes(input as CredentialService)
+  )
     throw new UserError("Invalid credential input", {
       code: "credential_invalid_input",
     });
-  return input as ModelProvider;
+  return input as CredentialService;
 }
 export function validateCredentialInput(input: unknown): {
-  provider: ModelProvider;
+  provider: CredentialService;
   key: string;
 } {
   if (
@@ -173,7 +178,7 @@ export const scrubCredentials = actor({
     save: async (
       context: CredentialContext,
       input: unknown
-    ): Promise<{ provider: ModelProvider; configured: true }> => {
+    ): Promise<{ provider: CredentialService; configured: true }> => {
       authorize(context);
       const value = validateCredentialInput(input);
       try {
@@ -193,12 +198,12 @@ export const scrubCredentials = actor({
     list: async (
       context: CredentialContext
     ): Promise<
-      { provider: ModelProvider; configured: true; updatedAt: string }[]
+      { provider: CredentialService; configured: true; updatedAt: string }[]
     > => {
       authorize(context);
       try {
         const rows = await context.db.execute<{
-          provider: ModelProvider;
+          provider: CredentialService;
           updated_at: string;
         }>("SELECT provider, updated_at FROM credentials ORDER BY provider");
         return rows.map((row) => ({
@@ -233,7 +238,7 @@ export const scrubCredentials = actor({
     remove: async (
       context: CredentialContext,
       input: unknown
-    ): Promise<{ provider: ModelProvider; configured: false }> => {
+    ): Promise<{ provider: CredentialService; configured: false }> => {
       authorize(context);
       const name = provider(input);
       try {
@@ -256,14 +261,19 @@ export interface CredentialsActorClient {
     getOrCreate(
       key: string[],
       options: { params: CredentialProof; signal?: AbortSignal }
-    ): { read(provider: ModelProvider): Promise<string | null> };
+    ): { read(provider: CredentialService): Promise<string | null> };
   };
 }
 export class RivetCredentialsResolver implements CredentialsResolver {
+  private readonly requestedServices: readonly CredentialService[];
+
   constructor(
     private readonly client: () => CredentialsActorClient,
-    private readonly token: () => string | undefined
-  ) {}
+    private readonly token: () => string | undefined,
+    requestedServices: readonly CredentialService[] = MODEL_CREDENTIAL_SERVICES
+  ) {
+    this.requestedServices = [...requestedServices];
+  }
 
   async resolve(signal?: AbortSignal): Promise<ProviderCredentials> {
     signal?.throwIfAborted();
@@ -275,20 +285,27 @@ export class RivetCredentialsResolver implements CredentialsResolver {
       : deadline;
     const credentials: ProviderCredentials = {};
     try {
-      for (const provider of PROVIDERS) {
-        operationSignal.throwIfAborted();
-        const value = await this.client()
-          .scrubCredentials.getOrCreate(CREDENTIAL_ACTOR_KEY, {
-            params: createCredentialProof(token),
-            signal: operationSignal,
-          })
-          .read(provider);
-        operationSignal.throwIfAborted();
-        if (value !== null)
-          credentials[provider] = validateCredentialInput({
-            provider,
-            key: value,
-          }).key;
+      for (const provider of this.requestedServices) {
+        try {
+          operationSignal.throwIfAborted();
+          const value = await this.client()
+            .scrubCredentials.getOrCreate(CREDENTIAL_ACTOR_KEY, {
+              params: createCredentialProof(token),
+              signal: operationSignal,
+            })
+            .read(provider);
+          operationSignal.throwIfAborted();
+          if (value !== null)
+            credentials[provider] = validateCredentialInput({
+              provider,
+              key: value,
+            }).key;
+        } catch (error) {
+          signal?.throwIfAborted();
+          // Optional telemetry credentials must not discard valid model keys.
+          // Provider failures retain their existing sanitized error semantics.
+          if (provider !== "langsmith") throw error;
+        }
       }
       return credentials;
     } catch (error) {

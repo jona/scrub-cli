@@ -5,8 +5,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RawAccess } from "rivetkit/db";
 import {
+  CREDENTIAL_SERVICES,
   EnvironmentCredentialsResolver,
   FallbackCredentialsResolver,
+  type CredentialService,
 } from "../../src/infrastructure/model/CredentialsResolver.js";
 import {
   CREDENTIAL_ACTOR_KEY,
@@ -207,6 +209,49 @@ describe("Rivet deployment credential authentication", () => {
     ).resolves.toEqual({ provider: "openai", configured: false });
   });
 
+  it("stores, rotates and revokes LangSmith separately without exposing its key in metadata", async () => {
+    const db = await database();
+    const context = {
+      db,
+      key: CREDENTIAL_ACTOR_KEY,
+      conn: {
+        state: verifyCredentialProof(
+          bootstrap,
+          CREDENTIAL_ACTOR_KEY,
+          createCredentialProof(bootstrap)
+        ),
+      },
+    };
+    const tracingKey = "test-only-langsmith-key";
+    const saved = await scrubCredentials.config.actions.save(context, {
+      provider: "langsmith",
+      key: tracingKey,
+    });
+    expect(saved).toEqual({ provider: "langsmith", configured: true });
+    expect(JSON.stringify(saved)).not.toContain(tracingKey);
+    expect(
+      await scrubCredentials.config.actions.read(context, "langsmith")
+    ).toBe(tracingKey);
+    await scrubCredentials.config.actions.save(context, {
+      provider: "langsmith",
+      key: "replacement-tracing-key",
+    });
+    expect(
+      await scrubCredentials.config.actions.read(context, "langsmith")
+    ).toBe("replacement-tracing-key");
+    const metadata = await scrubCredentials.config.actions.list(context);
+    expect(metadata).toMatchObject([
+      { provider: "langsmith", configured: true },
+    ]);
+    expect(JSON.stringify(metadata)).not.toContain("tracing-key");
+    expect(
+      await scrubCredentials.config.actions.remove(context, "langsmith")
+    ).toEqual({ provider: "langsmith", configured: false });
+    expect(
+      await scrubCredentials.config.actions.read(context, "langsmith")
+    ).toBeNull();
+  });
+
   it("checks auth and expiry for every action and rejects invalid providers and values", async () => {
     const db = await database();
     const context = {
@@ -222,20 +267,22 @@ describe("Rivet deployment credential authentication", () => {
     ]) {
       const denied = { ...context, conn } as never;
       await expect(
-        scrubCredentials.config.actions.read(denied, "openai")
-      ).rejects.toThrow("access denied");
-      await expect(
         scrubCredentials.config.actions.list(denied)
       ).rejects.toThrow("access denied");
-      await expect(
-        scrubCredentials.config.actions.remove(denied, "openai")
-      ).rejects.toThrow("access denied");
-      await expect(
-        scrubCredentials.config.actions.save(denied, {
-          provider: "openai",
-          key: testKey,
-        })
-      ).rejects.toThrow("access denied");
+      for (const provider of CREDENTIAL_SERVICES) {
+        await expect(
+          scrubCredentials.config.actions.read(denied, provider)
+        ).rejects.toThrow("access denied");
+        await expect(
+          scrubCredentials.config.actions.remove(denied, provider)
+        ).rejects.toThrow("access denied");
+        await expect(
+          scrubCredentials.config.actions.save(denied, {
+            provider,
+            key: testKey,
+          })
+        ).rejects.toThrow("access denied");
+      }
     }
     for (const value of [
       { provider: "other", key: testKey },
@@ -291,6 +338,10 @@ describe("Rivet deployment credential authentication", () => {
       () => bootstrap
     );
     expect(await resolver.resolve()).toEqual({ openai: testKey });
+    expect(read.mock.calls.map(([provider]) => provider)).toEqual([
+      "openai",
+      "anthropic",
+    ]);
     value = "replacement-provider-key";
     expect(await resolver.resolve()).toEqual({ openai: value });
     value = null;
@@ -340,6 +391,137 @@ describe("Rivet deployment credential authentication", () => {
     expect(client).not.toHaveBeenCalled();
   });
 
+  it("reads LangSmith only when explicitly requested, using authenticated SDK actions", async () => {
+    const stored: Partial<Record<CredentialService, string>> = {
+      openai: testKey,
+      langsmith: "test-only-langsmith-key",
+    };
+    const read = vi.fn(
+      async (provider: CredentialService) => stored[provider] ?? null
+    );
+    const resolver = new RivetCredentialsResolver(
+      () => ({
+        scrubCredentials: {
+          getOrCreate: (_key, options) => {
+            expect(
+              verifyCredentialProof(
+                bootstrap,
+                CREDENTIAL_ACTOR_KEY,
+                options.params
+              ).authorized
+            ).toBe(true);
+            expect(JSON.stringify(options.params)).not.toContain(bootstrap);
+            return { read };
+          },
+        },
+      }),
+      () => bootstrap,
+      CREDENTIAL_SERVICES
+    );
+    expect(await resolver.resolve()).toEqual(stored);
+    expect(read.mock.calls.map(([provider]) => provider)).toEqual(
+      CREDENTIAL_SERVICES
+    );
+    delete stored.langsmith;
+    expect(await resolver.resolve()).toEqual({ openai: testKey });
+  });
+
+  it("maps the server-only LangSmith environment key and ignores blank credentials", async () => {
+    const resolver = new EnvironmentCredentialsResolver(() => ({
+      OPENAI_API_KEY: ` ${testKey} `,
+      ANTHROPIC_API_KEY: " ",
+      LANGSMITH_API_KEY: " test-only-langsmith-key ",
+    }));
+    expect(await resolver.resolve()).toEqual({
+      openai: testKey,
+      langsmith: "test-only-langsmith-key",
+    });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(resolver.resolve(controller.signal)).rejects.toThrow();
+  });
+
+  it("keeps model credentials usable when optional LangSmith lookup fails, while propagating cancellation", async () => {
+    const controller = new AbortController();
+    let cancel = false;
+    const read = vi.fn(async (provider: CredentialService) => {
+      if (provider === "langsmith") {
+        if (cancel) controller.abort();
+        throw new Error("test-only-unreturned-tracing-key");
+      }
+      return `${provider}-test-only-key`;
+    });
+    const resolver = new RivetCredentialsResolver(
+      () => ({
+        scrubCredentials: { getOrCreate: () => ({ read }) },
+      }),
+      () => bootstrap,
+      CREDENTIAL_SERVICES
+    );
+    expect(await resolver.resolve()).toEqual({
+      openai: "openai-test-only-key",
+      anthropic: "anthropic-test-only-key",
+    });
+    cancel = true;
+    await expect(resolver.resolve(controller.signal)).rejects.toThrow();
+    expect(controller.signal.aborted).toBe(true);
+  });
+
+  it("does not request optional tracing credentials when the original model services are complete", async () => {
+    const fallback = {
+      resolve: vi.fn(async () => ({ langsmith: "stored-tracing-key" })),
+    };
+    const primary = new EnvironmentCredentialsResolver(() => ({
+      OPENAI_API_KEY: testKey,
+      ANTHROPIC_API_KEY: "test-only-anthropic-key",
+    }));
+    const resolver = new FallbackCredentialsResolver(primary, fallback);
+    expect(await resolver.resolve()).toEqual({
+      openai: testKey,
+      anthropic: "test-only-anthropic-key",
+    });
+    expect(fallback.resolve).not.toHaveBeenCalled();
+    const tracing = new FallbackCredentialsResolver(
+      primary,
+      fallback,
+      CREDENTIAL_SERVICES
+    );
+    expect(await tracing.resolve()).toEqual({
+      openai: testKey,
+      anthropic: "test-only-anthropic-key",
+      langsmith: "stored-tracing-key",
+    });
+    expect(fallback.resolve).toHaveBeenCalledOnce();
+  });
+
+  it("preserves tracing environment precedence and does not hide model lookup failure behind an unrequested key", async () => {
+    const fallback = {
+      resolve: vi.fn(async () => ({ langsmith: "stored-tracing-key" })),
+    };
+    const primary = new EnvironmentCredentialsResolver(() => ({
+      LANGSMITH_API_KEY: "environment-tracing-key",
+    }));
+    expect(
+      await new FallbackCredentialsResolver(
+        primary,
+        fallback,
+        CREDENTIAL_SERVICES
+      ).resolve()
+    ).toEqual({ langsmith: "environment-tracing-key" });
+    fallback.resolve.mockRejectedValueOnce(new Error("model lookup failed"));
+    await expect(
+      new FallbackCredentialsResolver(primary, fallback).resolve()
+    ).rejects.toThrow("model lookup failed");
+    fallback.resolve.mockRejectedValueOnce(new Error("model lookup failed"));
+    await expect(
+      new FallbackCredentialsResolver(
+        primary,
+        fallback,
+        CREDENTIAL_SERVICES
+      ).resolve()
+    ).rejects.toThrow("model lookup failed");
+  });
+
   it("uses explicit environment credentials first and keeps optional provider failures isolated", async () => {
     const fallback = {
       resolve: vi.fn(async () => ({
@@ -361,6 +543,39 @@ describe("Rivet deployment credential authentication", () => {
 });
 
 describe("provider credential provisioning input", () => {
+  it("ignores documented public LangSmith settings while provisioning only secret records", () => {
+    const combined = {
+      OPENAI_API_KEY: testKey,
+      ANTHROPIC_API_KEY: "test-only-anthropic-key",
+      LANGSMITH_API_KEY: "test-only-langsmith-key",
+      LANGSMITH_TRACING: "true",
+      LANGSMITH_PROJECT: "scrub-test-project",
+      LANGSMITH_ENDPOINT: "https://api.smith.langchain.com",
+      LANGSMITH_WORKSPACE_ID: "test-workspace",
+      SCRUB_LANGSMITH_CAPTURE_CONTENT: "false",
+      SCRUB_LANGSMITH_TIMEOUT_MS: "2000",
+    };
+    const expected = [
+      { provider: "openai", key: testKey },
+      { provider: "anthropic", key: "test-only-anthropic-key" },
+      { provider: "langsmith", key: "test-only-langsmith-key" },
+    ];
+    for (const text of [
+      JSON.stringify(combined),
+      Object.entries(combined)
+        .map(([name, value]) => `${name}=${value}`)
+        .join("\n"),
+    ])
+      expect(parseCredentialFile(text)).toEqual(expected);
+    for (const field of ["RIVET_TOKEN", "LANGSMITH_UNKNOWN", "OTHER_API_KEY"])
+      expect(() =>
+        parseCredentialFile(JSON.stringify({ ...combined, [field]: testKey }))
+      ).toThrow("may contain only");
+    expect(() =>
+      parseCredentialFile("LANGSMITH_TRACING=true\nLANGSMITH_PROJECT=test")
+    ).toThrow("No provider credentials");
+  });
+
   it("parses removal without accepting credential values as arguments", () => {
     expect(parseCredentialCommand(["remove", "openai"])).toEqual({
       command: "remove",
@@ -369,6 +584,10 @@ describe("provider credential provisioning input", () => {
     expect(parseCredentialCommand(["remove", "anthropic"])).toEqual({
       command: "remove",
       provider: "anthropic",
+    });
+    expect(parseCredentialCommand(["remove", "langsmith"])).toEqual({
+      command: "remove",
+      provider: "langsmith",
     });
     for (const args of [
       ["remove"],
@@ -383,6 +602,22 @@ describe("provider credential provisioning input", () => {
     expect(
       parseCredentialFile(`OPENAI_API_KEY=${testKey}\nANTHROPIC_API_KEY=\n`)
     ).toEqual([{ provider: "openai", key: testKey }]);
+    expect(
+      parseCredentialFile(
+        JSON.stringify({
+          OPENAI_API_KEY: testKey,
+          ANTHROPIC_API_KEY: "test-only-anthropic-key",
+          LANGSMITH_API_KEY: "test-only-langsmith-key",
+        })
+      )
+    ).toEqual([
+      { provider: "openai", key: testKey },
+      { provider: "anthropic", key: "test-only-anthropic-key" },
+      { provider: "langsmith", key: "test-only-langsmith-key" },
+    ]);
+    expect(
+      parseCredentialFile("LANGSMITH_API_KEY=test-only-langsmith-key\n")
+    ).toEqual([{ provider: "langsmith", key: "test-only-langsmith-key" }]);
     expect(() =>
       parseCredentialFile(JSON.stringify({ RIVET_TOKEN: testKey }))
     ).toThrow("may contain only");
