@@ -83,6 +83,10 @@
     "./cli": {
       "types": "./dist/entrypoints/cli/index.d.ts",
       "import": "./dist/entrypoints/cli/index.js"
+    },
+    "./api": {
+      "types": "./dist/entrypoints/api/handler.d.ts",
+      "import": "./dist/entrypoints/api/handler.js"
     }
   }
 }
