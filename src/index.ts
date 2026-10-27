@@ -11,7 +11,6 @@ export * from "./application/settings.js";
 export * from "./application/pipeline.js";
 export * from "./application/model.js";
 export * from "./application/inference.js";
-export * from "./core/inference.js";
 export * from "./application/artifact-io.js";
 
 export * from "./application/playlist.js";

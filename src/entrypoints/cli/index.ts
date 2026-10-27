@@ -16,7 +16,6 @@ export async function runCli(
 ): Promise<void> {
   const {
     config,
-    artifactStore,
     processFile,
     processYouTubePlaylist,
     checkFilePrerequisites,
@@ -95,7 +94,6 @@ export async function runCli(
       if (options.verbose) logger.setVerbose(true);
       if (options.outputDir) {
         config.setOutputDir(options.outputDir);
-        artifactStore.reinitialize();
       }
 
       try {
@@ -189,7 +187,6 @@ export async function runCli(
       if (options.verbose) logger.setVerbose(true);
       if (options.outputDir) {
         config.setOutputDir(options.outputDir);
-        artifactStore.reinitialize();
       }
 
       try {

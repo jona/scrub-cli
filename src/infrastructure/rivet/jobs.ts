@@ -32,7 +32,6 @@ import {
   RivetRequestRepository,
   RivetVideoRepository,
 } from "./JobRepositories.js";
-export type { VideoInitialization } from "../../application/jobs/model.js";
 import {
   assertInferenceReady,
   resolveInferenceSettings,
@@ -46,7 +45,7 @@ import { NodeSourceCatalog } from "../node/NodeSourceCatalog.js";
 import type { NativeRuntimeOptions } from "../node/runtime.js";
 import {
   RunnerAdmission,
-  type RivetConcurrencyPolicy,
+  type RuntimeConcurrencyPolicy,
 } from "../runtime/RunnerAdmission.js";
 import {
   migrateJobDatabase,
@@ -61,7 +60,7 @@ const POLL_MS = 2_000;
 const RETRY_MS = 5_000;
 export const MAX_RANGE_BYTES = 128 * 1024;
 let nativeOptions: NativeRuntimeOptions = { stagingRoot: "/tmp/scrub" };
-let concurrencyPolicy: RivetConcurrencyPolicy = {
+let concurrencyPolicy: RuntimeConcurrencyPolicy = {
   requestDefault: 1,
   runnerLimit: 2,
 };
@@ -87,13 +86,16 @@ interface RivetInferenceConfiguration {
     context: Pick<RuntimeContext, "client" | "abortSignal">
   ) => Promise<StructuredModelGateway>;
 }
-let inferenceConfiguration: RivetInferenceConfiguration = {
-  defaults: {
-    mode: "full",
-    summary: { provider: "openai", model: "gpt-6-luna" },
-    vision: { provider: "openai", model: "gpt-6-luna" },
-  },
-};
+let inferenceConfiguration: RivetInferenceConfiguration | undefined;
+
+function configuredInference(): RivetInferenceConfiguration {
+  if (!inferenceConfiguration)
+    throw new PipelineError(
+      "capability_unavailable",
+      "Rivet inference policy must be configured by its deployment"
+    );
+  return inferenceConfiguration;
+}
 
 /** Public defaults may be persisted; models and credential loaders remain in memory. */
 export function configureRivetInference(
@@ -110,9 +112,10 @@ async function modelsFor(
 ): Promise<StructuredModelGateway | undefined> {
   if (settings.inference?.mode !== "full") return undefined;
   context.abortSignal.throwIfAborted();
-  const models = inferenceConfiguration.resolveModels
-    ? await inferenceConfiguration.resolveModels(context)
-    : inferenceConfiguration.models;
+  const configuration = configuredInference();
+  const models = configuration.resolveModels
+    ? await configuration.resolveModels(context)
+    : configuration.models;
   context.abortSignal.throwIfAborted();
   if (preflight)
     assertInferenceReady(settings.inference, models, settings.skipVisuals);
@@ -122,10 +125,10 @@ async function modelsFor(
 /** Deployment composition supplies host capabilities and secrets before start. */
 export function configureRivetJobs(
   options: NativeRuntimeOptions,
-  concurrency: Partial<RivetConcurrencyPolicy> = {},
+  concurrency: Partial<RuntimeConcurrencyPolicy> = {},
   admission?: RunnerAdmission
 ): void {
-  const policy: RivetConcurrencyPolicy = {
+  const policy: RuntimeConcurrencyPolicy = {
     requestDefault: concurrency.requestDefault ?? 1,
     runnerLimit: concurrency.runnerLimit ?? 2,
     ...(concurrency.globalLimit === undefined
@@ -219,13 +222,12 @@ interface AdmissionRecord {
   version?: 2;
   nextToken?: number;
 }
-export type VideoStatus = VideoJobStatus;
 interface VideoHandle {
-  initialize(input: VideoInitialization): Promise<VideoStatus>;
-  getStatus(): Promise<VideoStatus | null>;
+  initialize(input: VideoInitialization): Promise<VideoJobStatus>;
+  getStatus(): Promise<VideoJobStatus | null>;
   getResult(): Promise<VideoResult | null>;
-  cancel(): Promise<VideoStatus>;
-  retry(): Promise<VideoStatus>;
+  cancel(): Promise<VideoJobStatus>;
+  retry(): Promise<VideoJobStatus>;
   readArtifact(
     id: string,
     offset: number,
@@ -506,7 +508,7 @@ export async function acquireExecution(
   context: RuntimeContext,
   owner: string,
   admission: RunnerAdmission = runnerAdmission,
-  policy: RivetConcurrencyPolicy = concurrencyPolicy
+  policy: RuntimeConcurrencyPolicy = concurrencyPolicy
 ): Promise<ExecutionLease | null> {
   const local = admission.tryAcquire(owner);
   if (!local) return null;
@@ -609,7 +611,7 @@ function submissionPolicy(context: RuntimeContext): SubmissionPolicy {
   return new SubmissionPolicy({
     requestDefault: concurrencyPolicy.requestDefault,
     resourceCeilings,
-    inferenceDefaults: inferenceConfiguration.defaults,
+    inferenceDefaults: configuredInference().defaults,
     assertReady: async (settings) => {
       await modelsFor(context, settings);
     },
@@ -648,17 +650,19 @@ function videoService(context: VideoContext): VideoJobService {
     environment,
   });
 }
-async function videoStatus(context: VideoContext): Promise<VideoStatus | null> {
+async function videoStatus(
+  context: VideoContext
+): Promise<VideoJobStatus | null> {
   const status = await videoService(context).getStatus();
   return status ? { ...status, actorId: context.actorId } : null;
 }
-async function abortVideo(context: VideoContext): Promise<VideoStatus> {
+async function abortVideo(context: VideoContext): Promise<VideoJobStatus> {
   return {
     ...(await videoService(context).cancel()),
     actorId: context.actorId,
   };
 }
-async function retryVideo(context: VideoContext): Promise<VideoStatus> {
+async function retryVideo(context: VideoContext): Promise<VideoJobStatus> {
   return { ...(await videoService(context).retry()), actorId: context.actorId };
 }
 
@@ -774,7 +778,7 @@ export const scrubVideo = actor({
     initialize: (
       context: VideoContext,
       input: VideoInitialization
-    ): Promise<VideoStatus> =>
+    ): Promise<VideoJobStatus> =>
       expose(
         (async () => {
           return {
@@ -783,16 +787,13 @@ export const scrubVideo = actor({
           };
         })()
       ),
-    kick: async (context: VideoContext): Promise<void> => {
-      await context.run.setWakeAt(Date.now());
-    },
-    getStatus: (context: VideoContext): Promise<VideoStatus | null> =>
+    getStatus: (context: VideoContext): Promise<VideoJobStatus | null> =>
       videoStatus(context),
     getResult: async (context: VideoContext): Promise<VideoResult | null> =>
       (await new SqliteRunRepository(context.db).get())?.result ?? null,
-    cancel: (context: VideoContext): Promise<VideoStatus> =>
+    cancel: (context: VideoContext): Promise<VideoJobStatus> =>
       expose(abortVideo(context)),
-    retry: (context: VideoContext): Promise<VideoStatus> =>
+    retry: (context: VideoContext): Promise<VideoJobStatus> =>
       expose(retryVideo(context)),
     readArtifact: (
       context: VideoContext,
@@ -829,7 +830,6 @@ export const scrubVideo = actor({
   },
 });
 
-type RequestDocument = JobRequestRecord;
 function requestRuntime(context: RequestContext): RequestRuntime {
   return {
     scheduleReconcile: (reason) =>
@@ -988,7 +988,7 @@ export const scrubRequest = actor({
     controller: null as AbortController | null,
   }),
   onWake: async (context: RequestContext) => {
-    const request = await new SqliteDocuments(context.db).get<RequestDocument>(
+    const request = await new SqliteDocuments(context.db).get<JobRequestRecord>(
       "request"
     );
     if (request && !terminal(request.status))

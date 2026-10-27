@@ -22,7 +22,7 @@ import type {
  */
 export class FasterWhisperAdapter implements ITranscriber {
   readonly name = "Faster Whisper (Python)";
-  constructor(private readonly environment: AdapterEnvironmentOptions = {}) {}
+  constructor(private readonly environment: AdapterEnvironmentOptions) {}
   readonly requiresApiKey = false;
 
   private pythonPath: string | null = null;

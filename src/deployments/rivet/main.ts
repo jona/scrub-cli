@@ -13,7 +13,7 @@ import {
   configureRivetSubmissionPolicy,
 } from "../../infrastructure/rivet/jobs.js";
 import { createMetricsServer } from "../../infrastructure/node/http/metrics.js";
-import { resolveRivetConcurrency } from "./config.js";
+import { resolveRuntimeConcurrency } from "../../infrastructure/runtime/config.js";
 import { resolveServerResourceLimits } from "../runtime-config.js";
 import {
   createDeploymentModelGateway,
@@ -32,7 +32,7 @@ import {
 
 const port = parsePort(process.env.PORT, 8080);
 const metricsPort = parsePort(process.env.RIVETKIT_METRICS_PORT, 9464);
-const concurrency = resolveRivetConcurrency(process.env);
+const concurrency = resolveRuntimeConcurrency(process.env);
 configureRivetSubmissionPolicy({
   resourceCeilings: resolveServerResourceLimits(process.env),
 });

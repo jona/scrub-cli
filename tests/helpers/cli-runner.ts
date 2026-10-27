@@ -3,9 +3,7 @@ import { join } from "path";
 import { TEST_OUTPUT_DIR } from "../e2e/setup.js";
 
 const CLI_PATH = join(process.cwd(), "dist", "deployments", "local", "cli.js");
-const COMMANDS_WITH_OUTPUT_DIR = new Set(["youtube", "file"]);
-
-export interface CLIResult {
+interface CLIResult {
   exitCode: number;
   stdout: string;
   stderr: string;
@@ -15,7 +13,7 @@ export interface CLIResult {
 /**
  * Run the scrub CLI with given arguments
  */
-export async function runCLI(args: string[]): Promise<CLIResult> {
+async function runCLI(args: string[]): Promise<CLIResult> {
   try {
     const cliArgs = withTestOutputDir(args);
     const result = await execa("node", [CLI_PATH, ...cliArgs], {
@@ -48,10 +46,6 @@ export async function runCLI(args: string[]): Promise<CLIResult> {
 
 function withTestOutputDir(args: string[]): string[] {
   const [command, target, ...rest] = args;
-  if (!COMMANDS_WITH_OUTPUT_DIR.has(command) || !target) {
-    return args;
-  }
-
   if (rest.includes("--output-dir") || rest.includes("-o")) {
     return args;
   }
@@ -69,20 +63,6 @@ export async function scrubVideo(
   const url = videoIdOrUrl.startsWith("http")
     ? videoIdOrUrl
     : `https://www.youtube.com/watch?v=${videoIdOrUrl}`;
-
-  return runCLI(["youtube", url, ...options]);
-}
-
-/**
- * Run scrub on a playlist URL
- */
-export async function scrubPlaylist(
-  playlistIdOrUrl: string,
-  options: string[] = []
-): Promise<CLIResult> {
-  const url = playlistIdOrUrl.startsWith("http")
-    ? playlistIdOrUrl
-    : `https://www.youtube.com/playlist?list=${playlistIdOrUrl}`;
 
   return runCLI(["youtube", url, ...options]);
 }

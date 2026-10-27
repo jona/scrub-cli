@@ -324,5 +324,41 @@ describe("architecture boundaries", () => {
       violations,
       "Dependencies crossed an application/provider boundary"
     ).toEqual([]);
+
+    const manifest = JSON.parse(
+      readFileSync(join(projectRoot, "package.json"), "utf8")
+    ) as {
+      main: string;
+      bin: Record<string, string>;
+      exports: Record<string, { import: string }>;
+      scripts: Record<string, string>;
+    };
+    const entrypoints = [
+      manifest.main,
+      ...Object.values(manifest.bin),
+      ...Object.values(manifest.exports).map((entry) => entry.import),
+      ...Object.values(manifest.scripts).flatMap((command) =>
+        [
+          ...command.matchAll(
+            /\b(?:node|tsx)\s+((?:dist|src)\/[^\s]+\.[jt]sx?)/g
+          ),
+        ].map((match) => match[1])
+      ),
+    ];
+    const roots = entrypoints.map((entry) =>
+      entry.replace(/^(?:\.\/)?(?:dist|src)\//, "").replace(/\.js$/, ".ts")
+    );
+    const reached = new Set<string>();
+    const pending = [...roots];
+    while (pending.length) {
+      const from = pending.pop()!;
+      if (reached.has(from)) continue;
+      reached.add(from);
+      pending.push(...(graph.get(from) ?? []));
+    }
+    expect(
+      [...graph.keys()].filter((file) => !reached.has(file)).sort(),
+      "Source modules must be used by a public export or executable entrypoint"
+    ).toEqual([]);
   });
 });

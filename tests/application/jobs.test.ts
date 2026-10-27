@@ -28,8 +28,8 @@ import type {
 } from "../../src/application/contracts.js";
 import { resolveSettings } from "../../src/application/settings.js";
 import { PipelineError } from "../../src/core/errors.js";
-import { MemoryRunRepository } from "../../src/infrastructure/memory/RunRepository.js";
-import { MemoryArtifactStorage } from "../../src/infrastructure/memory/ArtifactStorage.js";
+import { MemoryRunRepository } from "../helpers/memory/RunRepository.js";
+import { MemoryArtifactStorage } from "../helpers/memory/ArtifactStorage.js";
 
 const ids = ["aaaaaaaaaaa", "bbbbbbbbbbb", "ccccccccccc"];
 const at = () => 1_800_000_000_000;

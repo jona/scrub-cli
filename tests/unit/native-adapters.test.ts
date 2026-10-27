@@ -9,6 +9,7 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { FilesystemArtifactStorage } from "../../src/infrastructure/node/FilesystemArtifactStorage.js";
 import { NodeMediaProcessor } from "../../src/infrastructure/node/NodeMediaProcessor.js";
 import { NodeSourceCatalog } from "../../src/infrastructure/node/NodeSourceCatalog.js";
@@ -585,6 +586,53 @@ describe("native transcription isolation", () => {
     ]);
     expect(await readdir(join(root, "stage"))).toEqual([]);
   });
+  it("resolves the captions SDK independently of the caller directory and forwards data arguments to its cancellable process", async () => {
+    const root = await temporary();
+    const storage = new FilesystemArtifactStorage(join(root, "store"));
+    const audio = await storage.put("source/audio", bytes("wave"), "audio/wav");
+    const sdk = join(root, "fixture captions SDK.mjs");
+    await writeFile(
+      sdk,
+      'export const YoutubeTranscript={fetchTranscript:async(id,{lang})=>[{offset:1000,duration:2000,text:id+" "+lang}]};'
+    );
+    const execute = vi.fn<typeof runCommand>(async (command, args, options) => {
+      expect(command).toBe(process.execPath);
+      expect(args[3]).toBe(import.meta.resolve("youtube-transcript"));
+      expect(args.slice(4)).toEqual(["AAAAAAAAAA1", "en"]);
+      expect(options?.signal).toBeDefined();
+      expect(options?.timeoutMs).toBe(settings().limits.stageTimeoutMs);
+      // Replace only the remote dependency; execute the adapter's actual child
+      // script with no node_modules available in its working directory.
+      return runCommand(
+        command,
+        [...args.slice(0, 3), pathToFileURL(sdk).href, ...args.slice(4)],
+        { ...options, cwd: root }
+      );
+    });
+    const transcriber = new NodeTranscriber(storage, {
+      stagingRoot: join(root, "stage"),
+      runCommand: execute,
+    });
+    const result = await transcriber.transcribe(
+      {
+        audio,
+        source: {
+          kind: "youtube",
+          url: "https://www.youtube.com/watch?v=AAAAAAAAAA1",
+        },
+      },
+      settings(),
+      context()
+    );
+    expect(result).toMatchObject({
+      source: "youtube-captions",
+      fullText: "AAAAAAAAAA1 en",
+      segments: [{ start: 1, end: 3, text: "AAAAAAAAAA1 en" }],
+    });
+    expect(execute).toHaveBeenCalledOnce();
+    expect(await readdir(join(root, "stage"))).toEqual([]);
+  });
+
   it("passes each source explicitly and never reads local user configuration", async () => {
     vi.doMock("../../src/infrastructure/Config.js", () => {
       throw new Error(

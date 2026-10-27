@@ -19,7 +19,7 @@ import type {
   ArtifactStorage,
   OperationContext,
 } from "../../src/application/contracts.js";
-import { MemoryArtifactStorage } from "../../src/infrastructure/memory/ArtifactStorage.js";
+import { MemoryArtifactStorage } from "../helpers/memory/ArtifactStorage.js";
 import { PipelineError } from "../../src/core/errors.js";
 import { SUMMARY_SCHEMA } from "../../src/core/summary-template.js";
 import type { SummaryResult, VisualAnalysis } from "../../src/core/models.js";

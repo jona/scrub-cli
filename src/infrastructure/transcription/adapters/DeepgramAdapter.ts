@@ -19,7 +19,7 @@ import type {
  */
 export class DeepgramAdapter implements ITranscriber {
   readonly name = "Deepgram API";
-  constructor(private readonly environment: AdapterEnvironmentOptions = {}) {}
+  constructor(private readonly environment: AdapterEnvironmentOptions) {}
   readonly requiresApiKey = true;
 
   private client: DeepgramClient | null = null;

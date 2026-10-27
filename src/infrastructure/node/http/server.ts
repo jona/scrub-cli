@@ -1,10 +1,8 @@
 import { createServer, type RequestListener } from "node:http";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import type { ApiDependencies } from "../../../entrypoints/api/handler.js";
-import { createApiHandler } from "../../../entrypoints/api/handler.js";
 
-export function nodeRequestListener(
+function nodeRequestListener(
   handler: (request: Request) => Promise<Response>
 ): RequestListener {
   return (incoming, outgoing) => {
@@ -49,10 +47,6 @@ export function nodeRequestListener(
     });
   };
 }
-export function createNodeApiServer(dependencies: ApiDependencies = {}) {
-  return createNodeHttpServer(createApiHandler(dependencies));
-}
-
 export function createNodeHttpServer(
   handler: (request: Request) => Promise<Response>
 ) {

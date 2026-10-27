@@ -4,18 +4,13 @@ import {
   createLocalAdapters,
   runLocalPipeline,
   type LocalPipelineOptions,
-  type LocalProcessResult,
 } from "./pipeline.js";
-import { isYtDlpAvailable, isFfmpegAvailable } from "../download.js";
-import { getTranscriberDiagnostics } from "../transcribe.js";
 import type {
   PlaylistProcessResult,
   PlaylistVideoStatus,
   PlaylistVideoStatusType,
 } from "../../../types/index.js";
 
-export type YouTubeProcessOptions = LocalPipelineOptions;
-export type ProcessResult = LocalProcessResult;
 export interface YouTubePlaylistOptions extends Omit<
   LocalPipelineOptions,
   "onProgress" | "sourcePlaylist"
@@ -30,15 +25,6 @@ export interface YouTubePlaylistOptions extends Omit<
     status: PlaylistVideoStatusType,
     stage?: string
   ) => void;
-}
-export function processYouTube(
-  url: string,
-  options: YouTubeProcessOptions = {}
-): Promise<ProcessResult> {
-  return runLocalPipeline(
-    { kind: "youtube", url: canonicalizeYouTubeVideo(url) },
-    options
-  );
 }
 export async function processYouTubePlaylist(
   url: string,
@@ -57,18 +43,21 @@ export async function processYouTubePlaylist(
     {
       catalog: adapters.catalog,
       process: (entry, playlist, context) =>
-        processYouTube(entry.url, {
-          ...options,
-          signal: context.signal,
-          force: options.skipExisting === false,
-          sourcePlaylist: {
-            playlistId: playlist.playlistId,
-            title: playlist.title,
-            position: entry.position,
-          },
-          onProgress: (event) =>
-            context.emit({ runId: context.runId, ...event }),
-        }),
+        runLocalPipeline(
+          { kind: "youtube", url: canonicalizeYouTubeVideo(entry.url) },
+          {
+            ...options,
+            signal: context.signal,
+            force: options.skipExisting === false,
+            sourcePlaylist: {
+              playlistId: playlist.playlistId,
+              title: playlist.title,
+              position: entry.position,
+            },
+            onProgress: (event) =>
+              context.emit({ runId: context.runId, ...event }),
+          }
+        ),
     },
     {
       runId: "cli-playlist",
@@ -118,27 +107,5 @@ export async function processYouTubePlaylist(
     failed: videos.filter((video) => video.status === "failed").length,
     skipped: videos.filter((video) => video.status === "skipped").length,
     stats: result.stats,
-  };
-}
-export async function checkYouTubePrerequisites() {
-  const missing: string[] = [];
-  if (!(await isYtDlpAvailable()))
-    missing.push("yt-dlp (required for YouTube video download)");
-  if (!(await isFfmpegAvailable()))
-    missing.push("ffmpeg (required for audio/video processing)");
-  const transcribers = await getTranscriberDiagnostics();
-  return {
-    ready: missing.length === 0,
-    missing,
-    warnings: transcribers.some((t) => t.available)
-      ? []
-      : ["No transcription adapters available."],
-  };
-}
-export async function getDiagnostics() {
-  return {
-    ytdlp: await isYtDlpAvailable(),
-    ffmpeg: await isFfmpegAvailable(),
-    transcribers: await getTranscriberDiagnostics(),
   };
 }

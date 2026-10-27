@@ -75,7 +75,7 @@ export interface LocalProcessResult {
   reused: boolean;
 }
 
-export function localSettings(options: LocalPipelineOptions): PipelineSettings {
+function localSettings(options: LocalPipelineOptions): PipelineSettings {
   const visual = config.getVisual();
   const transcription = config.getTranscription();
   return resolveSettings({

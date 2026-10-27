@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { resolveRivetConcurrency } from "../../src/deployments/rivet/config.js";
+import { resolveRuntimeConcurrency } from "../../src/infrastructure/runtime/config.js";
 import { parseJobCommand } from "../../scripts/rivet/job.mjs";
 import { execa } from "execa";
 import { fileURLToPath } from "node:url";
 
-describe("Rivet deployment concurrency policy", () => {
+describe("Shared deployment concurrency policy", () => {
   it("defaults requests to one and runners to two, with the global cap disabled", () => {
-    expect(resolveRivetConcurrency({})).toEqual({
+    expect(resolveRuntimeConcurrency({})).toEqual({
       requestDefault: 1,
       runnerLimit: 2,
     });
@@ -18,12 +18,14 @@ describe("Rivet deployment concurrency policy", () => {
       SCRUB_RUNNER_CONCURRENCY: "64",
       SCRUB_GLOBAL_CONCURRENCY: "1024",
     });
-    expect(resolveRivetConcurrency(env)).toEqual({
+    expect(resolveRuntimeConcurrency(env)).toEqual({
       requestDefault: 16,
       runnerLimit: 64,
       globalLimit: 1024,
     });
-    expect(resolveRivetConcurrency({ SCRUB_GLOBAL_CONCURRENCY: "1" })).toEqual({
+    expect(
+      resolveRuntimeConcurrency({ SCRUB_GLOBAL_CONCURRENCY: "1" })
+    ).toEqual({
       requestDefault: 1,
       runnerLimit: 2,
       globalLimit: 1,
@@ -32,10 +34,10 @@ describe("Rivet deployment concurrency policy", () => {
 
   it("accepts the explicit none sentinel for a disabled image default", () => {
     expect(
-      resolveRivetConcurrency({ SCRUB_GLOBAL_CONCURRENCY: "none" })
+      resolveRuntimeConcurrency({ SCRUB_GLOBAL_CONCURRENCY: "none" })
     ).toEqual({ requestDefault: 1, runnerLimit: 2 });
     expect(() =>
-      resolveRivetConcurrency({ SCRUB_GLOBAL_CONCURRENCY: "NONE" })
+      resolveRuntimeConcurrency({ SCRUB_GLOBAL_CONCURRENCY: "NONE" })
     ).toThrow("SCRUB_GLOBAL_CONCURRENCY");
   });
 
@@ -58,7 +60,7 @@ describe("Rivet deployment concurrency policy", () => {
       "2_0",
       "9007199254740992",
     ])(`rejects invalid ${name}=%j`, (value) => {
-      expect(() => resolveRivetConcurrency({ [name]: value })).toThrow(name);
+      expect(() => resolveRuntimeConcurrency({ [name]: value })).toThrow(name);
     });
   }
   it.each([
@@ -66,7 +68,7 @@ describe("Rivet deployment concurrency policy", () => {
     ["SCRUB_RUNNER_CONCURRENCY", "65"],
     ["SCRUB_GLOBAL_CONCURRENCY", "1025"],
   ])("rejects %s above its maximum", (name, value) => {
-    expect(() => resolveRivetConcurrency({ [name]: value })).toThrow(name);
+    expect(() => resolveRuntimeConcurrency({ [name]: value })).toThrow(name);
   });
 });
 

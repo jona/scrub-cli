@@ -2,10 +2,10 @@ import type {
   ArtifactBytes,
   ArtifactRef,
   ArtifactStorage,
-} from "../../application/contracts.js";
-import { PipelineError } from "../../core/errors.js";
+} from "../../../src/application/contracts.js";
+import { PipelineError } from "../../../src/core/errors.js";
 
-/** Volatile storage for embedded callers and contract tests; never a durable deployment store. */
+/** In-memory artifact fixture for application contract tests. */
 export class MemoryArtifactStorage implements ArtifactStorage {
   private readonly values = new Map<string, Uint8Array>();
   private sequence = 0;

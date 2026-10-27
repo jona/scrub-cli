@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Server } from "node:http";
 import {
-  createNodeApiServer as createApiServer,
+  createNodeHttpServer,
   parsePort,
 } from "../../src/infrastructure/node/http/server.js";
 import { createMetricsServer } from "../../src/infrastructure/node/http/metrics.js";
+import { createApiHandler } from "../../src/entrypoints/api/handler.js";
+
+const createApiServer = () => createNodeHttpServer(createApiHandler());
 
 const servers: Server[] = [];
 
@@ -51,7 +54,9 @@ describe("public API server", () => {
       const api = await import("../../src/infrastructure/node/http/server.js");
       const metrics =
         await import("../../src/infrastructure/node/http/metrics.js");
-      expect(api.createNodeApiServer().listening).toBe(false);
+      expect(api.createNodeHttpServer(createApiHandler()).listening).toBe(
+        false
+      );
       expect(
         metrics.createMetricsServer(async () => new Response("")).listening
       ).toBe(false);

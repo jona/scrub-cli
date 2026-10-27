@@ -4,9 +4,6 @@ export interface RuntimeConcurrencyPolicy {
   runnerLimit: number;
   globalLimit?: number;
 }
-/** Backward-compatible name for the existing Rivet composition. */
-export type RivetConcurrencyPolicy = RuntimeConcurrencyPolicy;
-
 export interface RunnerLease {
   readonly token: number;
   isActive(): boolean;

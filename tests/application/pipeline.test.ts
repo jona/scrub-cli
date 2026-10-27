@@ -18,8 +18,8 @@ import type {
   PipelineEvent,
 } from "../../src/application/contracts.js";
 import { PipelineError, throwIfAborted } from "../../src/core/errors.js";
-import { MemoryArtifactStorage } from "../../src/infrastructure/memory/ArtifactStorage.js";
-import { MemoryRunRepository } from "../../src/infrastructure/memory/RunRepository.js";
+import { MemoryArtifactStorage } from "../helpers/memory/ArtifactStorage.js";
+import { MemoryRunRepository } from "../helpers/memory/RunRepository.js";
 import { FilesystemArtifactStorage } from "../../src/infrastructure/node/FilesystemArtifactStorage.js";
 
 const directories: string[] = [];

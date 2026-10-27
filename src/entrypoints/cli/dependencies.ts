@@ -85,7 +85,6 @@ export interface CliDependencies {
     getOutputDir(): string;
     getCacheDir(): string;
   };
-  artifactStore: { reinitialize(): void };
   processFile(
     file: string,
     options?: CliProcessOptions

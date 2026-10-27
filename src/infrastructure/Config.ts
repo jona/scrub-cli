@@ -84,7 +84,6 @@ export type Config = z.infer<typeof ConfigSchema>;
 export type TranscriptionConfig = z.infer<typeof TranscriptionConfigSchema>;
 export type VisualConfig = z.infer<typeof VisualConfigSchema>;
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
-export type CacheConfig = z.infer<typeof CacheConfigSchema>;
 export type LocalWhisperConfig = z.infer<typeof LocalWhisperConfigSchema>;
 
 /**
@@ -203,13 +202,6 @@ class ConfigManager {
   }
 
   /**
-   * Get cache configuration
-   */
-  getCache(): CacheConfig {
-    return this.config.cache;
-  }
-
-  /**
    * Get local Whisper configuration
    */
   getLocalWhisper(): LocalWhisperConfig {
@@ -228,13 +220,6 @@ class ConfigManager {
    */
   getConfigPath(): string | null {
     return this.configPath;
-  }
-
-  /**
-   * Get the expected user config path
-   */
-  getDefaultConfigPath(): string {
-    return CONFIG_FILE;
   }
 
   /**

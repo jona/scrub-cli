@@ -19,7 +19,7 @@ import type {
  */
 export class OpenAIWhisperAdapter implements ITranscriber {
   readonly name = "OpenAI Whisper API";
-  constructor(private readonly environment: AdapterEnvironmentOptions = {}) {}
+  constructor(private readonly environment: AdapterEnvironmentOptions) {}
   readonly requiresApiKey = true;
 
   private client: OpenAI | null = null;

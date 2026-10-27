@@ -1,3 +1,4 @@
+import type { VideoJobStatus } from "../../src/application/jobs/model.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -71,7 +72,6 @@ import {
   type JobActorClient,
   type RequestContext,
   type VideoContext,
-  type VideoStatus,
 } from "../../src/infrastructure/rivet/jobs.js";
 import { RivetJobGateway } from "../../src/infrastructure/rivet/JobGateway.js";
 import { RunnerAdmission } from "../../src/infrastructure/runtime/RunnerAdmission.js";
@@ -190,7 +190,7 @@ async function contexts() {
       actions.release({ db: admissionDb }, owner, token)
     ),
   };
-  const statuses = new Map<string, VideoStatus>();
+  const statuses = new Map<string, VideoJobStatus>();
   const initialized: string[] = [];
   const cancelled: string[] = [];
   const client = {
@@ -199,7 +199,7 @@ async function contexts() {
       getOrCreate: (keys: string[]) => ({
         initialize: async () => {
           initialized.push(keys[1]);
-          const status: VideoStatus = {
+          const status: VideoJobStatus = {
             status: "queued",
             stage: "queued",
             progress: 0,
@@ -213,7 +213,7 @@ async function contexts() {
           ({ metadata: { title: keys[1] } }) as VideoResult,
         cancel: async () => {
           cancelled.push(keys[1]);
-          const status: VideoStatus = {
+          const status: VideoJobStatus = {
             status: "cancelled",
             stage: "cancelled",
             progress: 0,
@@ -223,7 +223,7 @@ async function contexts() {
           return status;
         },
         retry: async () => {
-          const status: VideoStatus = {
+          const status: VideoJobStatus = {
             status: "queued",
             stage: "queued",
             progress: 0,

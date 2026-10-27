@@ -62,7 +62,6 @@
     "ink": "^5.1.0",
     "ink-spinner": "^5.0.0",
     "openai": "^7.45.0",
-    "ora": "^8.1.1",
     "react": "^18.3.1",
     "rivetkit": "3.0.0-preview.2",
     "youtube-transcript": "^1.2.1",
@@ -75,11 +74,9 @@
     "@vitest/coverage-v8": "^4.1.12",
     "esbuild": "^0.28.2",
     "execa": "^9.6.1",
-    "nock": "^14.0.10",
     "prettier": "^3.8.1",
     "tsx": "^4.23.15",
     "typescript": "^5.7.2",
-    "vite": "^7.3.7",
     "vitest": "^4.1.12"
   },
   "engines": {

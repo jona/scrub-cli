@@ -19,7 +19,7 @@ import { YouTubeCaptionsAdapter } from "./adapters/YouTubeCaptionsAdapter.js";
 export class TranscriberFactory {
   private readonly adapters: Map<TranscriptionSource, ITranscriber>;
   constructor(
-    private readonly environment: AdapterEnvironmentOptions = {},
+    private readonly environment: AdapterEnvironmentOptions,
     overrides: Partial<Record<TranscriptionSource, ITranscriber>> = {}
   ) {
     this.adapters = new Map<TranscriptionSource, ITranscriber>([
@@ -39,26 +39,6 @@ export class TranscriberFactory {
           new YouTubeCaptionsAdapter(environment),
       ],
     ]);
-  }
-  getAdapter(source: TranscriptionSource) {
-    return this.adapters.get(source);
-  }
-  async isAvailable(source: TranscriptionSource): Promise<boolean> {
-    return (await this.adapters.get(source)?.isAvailable()) ?? false;
-  }
-  async getAvailableAdapters() {
-    const { config } = await adapterEnvironment(this.environment);
-    const available: Array<{
-      source: TranscriptionSource;
-      adapter: ITranscriber;
-    }> = [];
-    for (const name of config.getTranscription().priority) {
-      const source = name as TranscriptionSource;
-      const adapter = this.adapters.get(source);
-      if (adapter && (await adapter.isAvailable()))
-        available.push({ source, adapter });
-    }
-    return available;
   }
   async transcribe(
     audioPath: string,
@@ -108,21 +88,6 @@ export class TranscriberFactory {
       }
     );
   }
-  async transcribeWithCaptions(
-    videoUrl: string,
-    audioPath?: string,
-    options?: TranscriptionOptions
-  ) {
-    const captions = this.adapters.get("youtube-captions")!;
-    try {
-      return await captions.transcribe("", { ...options, videoUrl });
-    } catch (error) {
-      throwIfAborted(options?.signal);
-      if (audioPath)
-        return this.transcribe(audioPath, { ...options, videoUrl });
-      throw error;
-    }
-  }
   async getDiagnostics() {
     const result = [];
     for (const [source, adapter] of this.adapters)
@@ -134,23 +99,4 @@ export class TranscriberFactory {
       });
     return result;
   }
-  clearCache() {
-    /* Availability is deliberately re-evaluated per operation. */
-  }
 }
-
-/** Legacy facade creates a fresh factory per call and has no import-time host effects. */
-export const transcriberFactory = {
-  transcribe: (...args: Parameters<TranscriberFactory["transcribe"]>) =>
-    new TranscriberFactory().transcribe(...args),
-  transcribeWithCaptions: (
-    ...args: Parameters<TranscriberFactory["transcribeWithCaptions"]>
-  ) => new TranscriberFactory().transcribeWithCaptions(...args),
-  getDiagnostics: () => new TranscriberFactory().getDiagnostics(),
-  getAvailableAdapters: () => new TranscriberFactory().getAvailableAdapters(),
-  isAvailable: (source: TranscriptionSource) =>
-    new TranscriberFactory().isAvailable(source),
-  getAdapter: (source: TranscriptionSource) =>
-    new TranscriberFactory().getAdapter(source),
-  clearCache() {},
-};

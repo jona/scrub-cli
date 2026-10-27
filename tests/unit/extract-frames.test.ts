@@ -5,16 +5,6 @@ vi.mock("../../src/utils/helpers.js", () => ({
   runCommand: vi.fn(),
 }));
 
-vi.mock("../../src/infrastructure/Config.js", () => ({
-  config: {
-    getVisual: vi.fn(() => ({
-      enabled: true,
-      sceneThreshold: 0.4,
-      maxFrames: 20,
-    })),
-  },
-}));
-
 import { extractFrames } from "../../src/infrastructure/node/extract-frames.js";
 import { commandExists } from "../../src/utils/helpers.js";
 

@@ -91,16 +91,9 @@ export async function prepare(
 }
 
 /**
- * Determine if input is a local file path (not a URL)
- */
-export function isLocalFilePath(input: string): boolean {
-  return /\.(mp3|mp4)$/i.test(input) && !input.startsWith("http");
-}
-
-/**
  * Get the media type of a local file
  */
-export function getLocalFileType(filePath: string): "mp3" | "mp4" | null {
+function getLocalFileType(filePath: string): "mp3" | "mp4" | null {
   const lower = filePath.toLowerCase();
   if (lower.endsWith(".mp3")) return "mp3";
   if (lower.endsWith(".mp4")) return "mp4";
@@ -123,7 +116,7 @@ export function generateContentId(filePath: string): string {
 /**
  * Get media duration using ffprobe
  */
-export async function getMediaDuration(
+async function getMediaDuration(
   filePath: string,
   options: NativeOperationOptions = {}
 ): Promise<number> {
@@ -158,7 +151,7 @@ export async function getMediaDuration(
 /**
  * Extract audio from any media file to WAV format (16kHz mono for Whisper)
  */
-export async function extractAudioToWav(
+async function extractAudioToWav(
   inputPath: string,
   outputPath: string,
   options: NativeOperationOptions = {}

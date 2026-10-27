@@ -1,4 +1,7 @@
-import type { RunRecord, RunRepository } from "../../application/contracts.js";
+import type {
+  RunRecord,
+  RunRepository,
+} from "../../../src/application/contracts.js";
 
 /** One run's volatile state. Atomic transitions match durable repository semantics. */
 export class MemoryRunRepository implements RunRepository {

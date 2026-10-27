@@ -1,10 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import { scrubVideo } from "../../helpers/cli-runner.js";
-import { useVCR } from "../../helpers/vcr.js";
-import { getTestVideoId } from "../../helpers/fixtures.js";
-import { TEST_OUTPUT_DIR } from "../setup.js";
+import { TEST_OUTPUT_DIR, TEST_VIDEO_ID } from "../setup.js";
 
 /** Recursively find the first file with the given name under `dir`. */
 function findFile(dir: string, name: string): string | null {
@@ -22,16 +20,7 @@ function findFile(dir: string, name: string): string | null {
 }
 
 describe("CLI: Process Video E2E", () => {
-  const testVideoId = getTestVideoId();
-  const vcr = useVCR("process-video");
-
-  beforeEach(async () => {
-    await vcr.beforeEach();
-  });
-
-  afterEach(async () => {
-    await vcr.afterEach();
-  });
+  const testVideoId = TEST_VIDEO_ID;
 
   describe("scrub youtube <video-url>", () => {
     it("should process a video and emit the summary prompt + schema", async () => {

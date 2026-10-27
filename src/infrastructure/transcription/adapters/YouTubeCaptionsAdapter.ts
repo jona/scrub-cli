@@ -1,5 +1,4 @@
 import { runCommand } from "../../../utils/helpers.js";
-import { YoutubeTranscript } from "youtube-transcript";
 import {
   adapterEnvironment,
   type AdapterEnvironmentOptions,
@@ -19,14 +18,14 @@ import type {
  * This is the fallback option - it uses YouTube's auto-generated
  * or manually added captions instead of transcribing the audio.
  *
- * Pros: Fast, free, no dependencies
+ * Pros: Fast, free, no provider API key
  * Cons: Not all videos have captions, quality varies
  */
 export class YouTubeCaptionsAdapter implements ITranscriber {
   readonly name = "YouTube Captions";
   readonly requiresApiKey = false;
 
-  constructor(private readonly environment: AdapterEnvironmentOptions = {}) {}
+  constructor(private readonly environment: AdapterEnvironmentOptions) {}
 
   /**
    * YouTube captions are always "available" as a fallback
@@ -63,24 +62,21 @@ export class YouTubeCaptionsAdapter implements ITranscriber {
     try {
       // Fetch transcript from YouTube
       // Isolate the library in a cancellable process because it exposes no AbortSignal.
-      const transcript = runtime
-        ? await (async () => {
-            const result = await (runtime.runCommand ?? runCommand)(
-              process.execPath,
-              [
-                "--input-type=module",
-                "-e",
-                'import {YoutubeTranscript} from "youtube-transcript"; const result=await YoutubeTranscript.fetchTranscript(process.argv[1],{lang:process.argv[2]}); process.stdout.write(JSON.stringify(result));',
-                videoId,
-                language,
-              ],
-              options
-            );
-            if (result.code !== 0)
-              throw new Error("YouTube captions are unavailable");
-            return JSON.parse(result.stdout) as YouTubeTranscriptItem[];
-          })()
-        : await YoutubeTranscript.fetchTranscript(videoId, { lang: language });
+      const result = await (runtime?.runCommand ?? runCommand)(
+        process.execPath,
+        [
+          "--input-type=module",
+          "-e",
+          "const {YoutubeTranscript}=await import(process.argv[1]); const result=await YoutubeTranscript.fetchTranscript(process.argv[2],{lang:process.argv[3]}); process.stdout.write(JSON.stringify(result));",
+          import.meta.resolve("youtube-transcript"),
+          videoId,
+          language,
+        ],
+        options
+      );
+      if (result.code !== 0)
+        throw new Error("YouTube captions are unavailable");
+      const transcript = JSON.parse(result.stdout) as YouTubeTranscriptItem[];
 
       if (!transcript || transcript.length === 0) {
         throw new Error("No captions available for this video");

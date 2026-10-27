@@ -10,4 +10,5 @@ dist
 .cache
 .output
 coverage
+.test-output
 tests

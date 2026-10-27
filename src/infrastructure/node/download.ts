@@ -1,5 +1,5 @@
 /** Node yt-dlp implementation. Portable callers use MediaProcessor. */
-import { commandExists, runCommand } from "../../utils/helpers.js";
+import { runCommand } from "../../utils/helpers.js";
 import { canonicalizeYouTubeVideo, extractVideoId } from "../../core/source.js";
 import { PipelineError } from "../../core/errors.js";
 import type { MediaMetadata } from "../../core/models.js";
@@ -119,10 +119,4 @@ export async function fetchYouTubeMetadata(
         : "",
     url,
   };
-}
-export async function isYtDlpAvailable(): Promise<boolean> {
-  return commandExists("yt-dlp");
-}
-export async function isFfmpegAvailable(): Promise<boolean> {
-  return commandExists("ffmpeg");
 }

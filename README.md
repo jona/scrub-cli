@@ -490,6 +490,19 @@ stage functions. Request validation/defaults, durable coordination, cancellation
 retry, and video lifecycle live in the application layer; actor actions delegate
 to them. Runtime adapters own timers, admission, fencing, and durable wake delivery.
 
+Rivet code appears in both infrastructure and deployment because those layers have
+different responsibilities:
+
+| Location                    | Responsibility                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| `src/infrastructure/rivet/` | Implement job, storage, scheduling, admission, and credential ports using Rivet |
+| `src/deployments/rivet/`    | Configure those adapters and start the registry, API, and MCP hosts             |
+| `deployments/rivet/`        | Prepare dependencies for the Rivet runner image                                 |
+| `scripts/rivet/`            | Operate and verify a Rivet deployment through its SDK or build tooling          |
+
+Changing hosting providers replaces the infrastructure adapters and deployment
+composition. The shared pipeline and interface contracts stay the same.
+
 Scrub is a single npm package. Importing `scrub-cli` resolves to `dist/index.js`,
 compiled from `src/index.ts`, and exposes the portable core/application API;
 `scrub-cli/cli`, `scrub-cli/api`, and `scrub-cli/mcp` expose the corresponding
@@ -514,7 +527,6 @@ src/
   infrastructure/transcription/ # Provider adapters and scoped fallback
   infrastructure/model/     # Structured model SDK adapters and provider registry
   infrastructure/filesystem/    # Local run records and compatibility publication
-  infrastructure/memory/    # Volatile reference adapters
   infrastructure/runtime/   # Runner-process admission and concurrency policy
   infrastructure/rivet/     # Actors, gateway, SQLite storage and admission leases
   deployments/local/cli.ts   # Local executable composition

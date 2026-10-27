@@ -15,8 +15,8 @@ import {
 } from "../../src/application/artifact-io.js";
 import type { OperationContext } from "../../src/application/contracts.js";
 import type { MediaMetadata } from "../../src/core/models.js";
-import { MemoryArtifactStorage } from "../../src/infrastructure/memory/ArtifactStorage.js";
-import { MemoryRunRepository } from "../../src/infrastructure/memory/RunRepository.js";
+import { MemoryArtifactStorage } from "../helpers/memory/ArtifactStorage.js";
+import { MemoryRunRepository } from "../helpers/memory/RunRepository.js";
 
 const metadata: MediaMetadata = {
   contentId: "dQw4w9WgXcQ",

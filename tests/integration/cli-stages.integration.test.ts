@@ -15,6 +15,24 @@ afterEach(async () => {
 });
 
 describe("manual CLI stages through application use cases", () => {
+  it("keeps doctor and transcription discovery available through the active CLI diagnostics", async () => {
+    const f = await createNativeCliFixture();
+    fixtures.push(f);
+    const doctor = await f.run(["doctor"]);
+    expect(doctor.exitCode, doctor.stdout + doctor.stderr).toBe(0);
+    expect(doctor.stdout).toContain("ffmpeg");
+    expect(doctor.stdout).toContain("yt-dlp");
+    expect(doctor.stdout).toContain("Local Whisper");
+    const adapters = await f.run(["transcribers"]);
+    expect(adapters.exitCode, adapters.stdout + adapters.stderr).toBe(0);
+    expect(adapters.stdout).toContain("local-whisper");
+    expect(
+      (await f.calls()).some((call) =>
+        ["yt-dlp", "ffmpeg", "whisper"].includes(call.tool)
+      )
+    ).toBe(false);
+  });
+
   it("actually reprocesses every repeated playlist occurrence with --no-skip-existing", async () => {
     const f = await createNativeCliFixture();
     fixtures.push(f);

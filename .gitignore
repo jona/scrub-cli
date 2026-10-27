@@ -27,6 +27,7 @@ npm-debug.log*
 
 # Test coverage
 coverage/
+.test-output/
 
 # Local credentials and deployment images
 .env*

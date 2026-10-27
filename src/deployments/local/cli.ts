@@ -2,17 +2,14 @@
 import { extname } from "node:path";
 import { runCli } from "../../entrypoints/cli/index.js";
 import { config } from "../../infrastructure/Config.js";
-import { artifactStore } from "../../infrastructure/filesystem/ArtifactStore.js";
+import { processFile } from "../../infrastructure/node/cli/file.js";
+import { processYouTubePlaylist } from "../../infrastructure/node/cli/youtube.js";
 import {
-  processFile,
   checkFilePrerequisites,
-} from "../../infrastructure/node/cli/file.js";
-import {
-  processYouTubePlaylist,
   checkYouTubePrerequisites,
   getDiagnostics,
-} from "../../infrastructure/node/cli/youtube.js";
-import { getTranscriberDiagnostics } from "../../infrastructure/node/transcribe.js";
+  getTranscriberDiagnostics,
+} from "../../infrastructure/node/cli/diagnostics.js";
 import { createCliStages } from "../../infrastructure/node/cli/stages.js";
 import {
   createDeploymentModelGateway,
@@ -53,7 +50,6 @@ const modelDefaults = (overrides: CliInferenceOptions) => {
 
 await runCli(process.argv, {
   config,
-  artifactStore,
   processFile: (file, options) =>
     processFile(
       file,

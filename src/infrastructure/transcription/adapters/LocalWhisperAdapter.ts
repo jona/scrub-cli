@@ -23,7 +23,7 @@ import type {
  */
 export class LocalWhisperAdapter implements ITranscriber {
   readonly name = "Local Whisper (whisper.cpp)";
-  constructor(private readonly environment: AdapterEnvironmentOptions = {}) {}
+  constructor(private readonly environment: AdapterEnvironmentOptions) {}
   readonly requiresApiKey = false;
 
   private whisperPath: string | null = null;

@@ -6,18 +6,15 @@ import {
   writeFileSync,
   readdirSync,
 } from "fs";
-import { config } from "../Config.js";
 import { logger } from "../../utils/logger.js";
-import { slugify } from "../../utils/helpers.js";
+import { slugify } from "../../core/format.js";
 import type {
   ArtifactManifest,
   ArtifactIndex,
   ArtifactIndexEntry,
   ArtifactType,
   MediaMetadata,
-  SummaryResult,
   SceneFrame,
-  VisualAnalysis,
   SourcePlaylist,
 } from "../../types/index.js";
 import type { TranscriptionResult } from "../transcription/ITranscriber.js";
@@ -26,11 +23,11 @@ const PIPELINE_VERSION = "1.0.0";
 const INDEX_VERSION = "1.0.0";
 
 /**
- * Service for managing artifact storage in .output directory
+ * CLI output projection and index management for an explicit output directory
  *
  * Directory structure:
- * .output/
- * ├── {number}/          (sequential, assigned in order of creation)
+ * {outputDirectory}/
+ * ├── {title-slug}/      (stable slug, disambiguated within the index)
  * │   ├── manifest.json
  * │   ├── source/
  * │   │   ├── audio.wav
@@ -45,7 +42,7 @@ const INDEX_VERSION = "1.0.0";
  * │   ├── prompt/                  (scrub's deterministic output)
  * │   │   ├── summary.prompt.md
  * │   │   └── summary.schema.json
- * │   ├── inference/               (harness-produced, optional)
+ * │   ├── inference/               (model output, optional)
  * │   │   ├── summary.json
  * │   │   └── visual_analysis.json
  * │   ├── output/                  (rendered from a model's summary.json)
@@ -54,11 +51,11 @@ const INDEX_VERSION = "1.0.0";
  * └── index.json
  */
 export class ArtifactStore {
-  private outputDir: string;
-  private dirMap: Map<string, string> = new Map(); // contentId → directory name
+  private readonly outputDir: string;
+  private readonly dirMap: Map<string, string> = new Map(); // contentId → directory name
 
-  constructor(options: { outputDirectory?: string } = {}) {
-    this.outputDir = options.outputDirectory ?? config.getOutputDir();
+  constructor(options: { outputDirectory: string }) {
+    this.outputDir = options.outputDirectory;
     this.loadDirMap();
   }
 
@@ -106,21 +103,6 @@ export class ArtifactStore {
   }
 
   /**
-   * Re-read config and reload the dir map (call after config.setOutputDir)
-   */
-  reinitialize(): void {
-    this.outputDir = config.getOutputDir();
-    this.loadDirMap();
-  }
-
-  /**
-   * Get the base output directory
-   */
-  getOutputDir(): string {
-    return this.outputDir;
-  }
-
-  /**
    * Get the artifact directory for a specific video
    */
   getVideoDir(contentId: string, title?: string): string {
@@ -130,7 +112,7 @@ export class ArtifactStore {
   /**
    * Get the source directory for a video (audio, video, metadata)
    */
-  getSourceDir(contentId: string): string {
+  private getSourceDir(contentId: string): string {
     return join(this.getVideoDir(contentId), "source");
   }
 
@@ -144,37 +126,23 @@ export class ArtifactStore {
   /**
    * Get the transcription directory for a video
    */
-  getTranscriptionDir(contentId: string): string {
+  private getTranscriptionDir(contentId: string): string {
     return join(this.getVideoDir(contentId), "transcription");
   }
 
   /**
    * Get the prompt directory for a video (scrub's deterministic output)
    */
-  getPromptDir(contentId: string): string {
+  private getPromptDir(contentId: string): string {
     return join(this.getVideoDir(contentId), "prompt");
-  }
-
-  /**
-   * Get the inference directory for a video (harness-produced artifacts)
-   */
-  getInferenceDir(contentId: string): string {
-    return join(this.getVideoDir(contentId), "inference");
-  }
-
-  /**
-   * Get the output directory for a video (rendered markdown)
-   */
-  getOutputSubdir(contentId: string): string {
-    return join(this.getVideoDir(contentId), "output");
   }
 
   /**
    * Ensure the directories scrub's deterministic pipeline writes to exist.
    *
    * The `inference/` and `output/` directories are NOT created here — they hold
-   * harness-produced (model) output and rendered markdown, so they're created on
-   * demand by whoever writes them (`render`, or a harness), never left empty.
+   * model output and rendered markdown. The full pipeline, render command, or
+   * an external harness creates them when publishing those artifacts.
    */
   ensureVideoDirectories(contentId: string, title?: string): void {
     const dirs = [
@@ -193,16 +161,9 @@ export class ArtifactStore {
   }
 
   /**
-   * Check if a video has been processed (exists in index)
-   */
-  hasVideo(contentId: string): boolean {
-    return this.dirMap.has(contentId);
-  }
-
-  /**
    * Check if a specific artifact exists
    */
-  hasArtifact(contentId: string, type: ArtifactType): boolean {
+  private hasArtifact(contentId: string, type: ArtifactType): boolean {
     const path = this.getArtifactPath(contentId, type);
     return existsSync(path);
   }
@@ -254,15 +215,6 @@ export class ArtifactStore {
   }
 
   /**
-   * Load video metadata
-   */
-  loadMetadata(contentId: string): MediaMetadata | null {
-    const path = this.getArtifactPath(contentId, "source/metadata");
-    if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, "utf-8"));
-  }
-
-  /**
    * Save transcription result (both JSON and plain text)
    */
   saveTranscription(contentId: string, transcript: TranscriptionResult): void {
@@ -277,53 +229,6 @@ export class ArtifactStore {
     const txtPath = this.getArtifactPath(contentId, "transcription/txt");
     writeFileSync(txtPath, transcript.fullText, "utf-8");
     logger.debug(`Saved transcript text to ${txtPath}`);
-  }
-
-  /**
-   * Load transcription result
-   */
-  loadTranscription(contentId: string): TranscriptionResult | null {
-    const path = this.getArtifactPath(contentId, "transcription/json");
-    if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, "utf-8"));
-  }
-
-  /**
-   * Save summary result
-   */
-  saveSummary(contentId: string, summary: SummaryResult): void {
-    const path = this.getArtifactPath(contentId, "inference/summary");
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(summary, null, 2), "utf-8");
-    logger.debug(`Saved summary to ${path}`);
-  }
-
-  /**
-   * Load summary result
-   */
-  loadSummary(contentId: string): SummaryResult | null {
-    const path = this.getArtifactPath(contentId, "inference/summary");
-    if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, "utf-8"));
-  }
-
-  /**
-   * Save visual analysis results
-   */
-  saveVisualAnalysis(contentId: string, visuals: VisualAnalysis[]): void {
-    const path = this.getArtifactPath(contentId, "inference/visual_analysis");
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(visuals, null, 2), "utf-8");
-    logger.debug(`Saved visual analysis to ${path}`);
-  }
-
-  /**
-   * Load visual analysis results
-   */
-  loadVisualAnalysis(contentId: string): VisualAnalysis[] | null {
-    const path = this.getArtifactPath(contentId, "inference/visual_analysis");
-    if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, "utf-8"));
   }
 
   /**
@@ -344,42 +249,9 @@ export class ArtifactStore {
   }
 
   /**
-   * Save the assembled summary prompt + output schema (scrub's deterministic output)
-   */
-  savePrompt(contentId: string, prompt: string, schema: unknown): string {
-    this.ensureVideoDirectories(contentId);
-    const promptPath = this.getArtifactPath(contentId, "prompt/summary");
-    const schemaPath = this.getArtifactPath(contentId, "prompt/schema");
-    writeFileSync(promptPath, prompt, "utf-8");
-    writeFileSync(schemaPath, JSON.stringify(schema, null, 2), "utf-8");
-    logger.debug(`Saved prompt to ${promptPath} and schema to ${schemaPath}`);
-    return promptPath;
-  }
-
-  /**
-   * Save markdown output
-   */
-  saveMarkdown(contentId: string, markdown: string): string {
-    const path = this.getArtifactPath(contentId, "output/markdown");
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, markdown, "utf-8");
-    logger.debug(`Saved markdown to ${path}`);
-    return path;
-  }
-
-  /**
-   * Load markdown output
-   */
-  loadMarkdown(contentId: string): string | null {
-    const path = this.getArtifactPath(contentId, "output/markdown");
-    if (!existsSync(path)) return null;
-    return readFileSync(path, "utf-8");
-  }
-
-  /**
    * Get list of frame paths in the frames directory
    */
-  getFramePaths(contentId: string): string[] {
+  private getFramePaths(contentId: string): string[] {
     const framesDir = this.getFramesDir(contentId);
     if (!existsSync(framesDir)) return [];
 
@@ -392,7 +264,7 @@ export class ArtifactStore {
   /**
    * Save the manifest for a video
    */
-  saveManifest(contentId: string, manifest: ArtifactManifest): void {
+  private saveManifest(contentId: string, manifest: ArtifactManifest): void {
     this.ensureVideoDirectories(contentId);
     const path = join(this.getVideoDir(contentId), "manifest.json");
     writeFileSync(path, JSON.stringify(manifest, null, 2), "utf-8");
@@ -400,18 +272,9 @@ export class ArtifactStore {
   }
 
   /**
-   * Load the manifest for a video
-   */
-  loadManifest(contentId: string): ArtifactManifest | null {
-    const path = join(this.getVideoDir(contentId), "manifest.json");
-    if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, "utf-8"));
-  }
-
-  /**
    * Create a manifest from current artifacts
    */
-  createManifest(
+  private createManifest(
     contentId: string,
     metadata: MediaMetadata,
     transcriptionSource: string | null,
@@ -461,7 +324,7 @@ export class ArtifactStore {
   /**
    * Save processing stats
    */
-  saveStats(contentId: string, stats: ArtifactManifest["stats"]): void {
+  private saveStats(contentId: string, stats: ArtifactManifest["stats"]): void {
     this.ensureVideoDirectories(contentId);
     const path = join(this.getVideoDir(contentId), "stats.json");
     writeFileSync(path, JSON.stringify(stats, null, 2), "utf-8");
@@ -488,7 +351,7 @@ export class ArtifactStore {
   /**
    * Update the global index with a new video entry
    */
-  updateIndex(contentId: string, entry: ArtifactIndexEntry): void {
+  private updateIndex(contentId: string, entry: ArtifactIndexEntry): void {
     const index = this.getIndex();
 
     index.media[contentId] = entry;
@@ -535,15 +398,4 @@ export class ArtifactStore {
 
     logger.info(`Finalized artifacts for ${contentId}`);
   }
-
-  /**
-   * List all processed video IDs
-   */
-  listVideoIds(): string[] {
-    const index = this.getIndex();
-    return Object.keys(index.media);
-  }
 }
-
-// Export singleton instance
-export const artifactStore = new ArtifactStore();
