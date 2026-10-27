@@ -972,7 +972,14 @@ export async function reconcileRequest(
   context: RequestContext
 ): Promise<JobSnapshot | null> {
   const coordinator = new RequestCoordinator(requestOptions(context));
-  if (context.vars.ticking) return coordinator.snapshot();
+  if (context.vars.ticking) {
+    const snapshot = await coordinator.snapshot();
+    // A slow reconciliation can still own the actor when its pre-armed tick
+    // fires. Preserve that tick's successor before acknowledging delivery.
+    if (snapshot && !terminal(snapshot.status))
+      await requestRuntime(context).scheduleReconcile("poll");
+    return snapshot;
+  }
   context.vars.ticking = true;
   try {
     return await coordinator.reconcile();

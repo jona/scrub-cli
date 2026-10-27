@@ -1132,6 +1132,145 @@ describe("Rivet job lifecycle", () => {
     expect(page.items[1].failure?.message).toBe("No transcript");
   });
 
+  it("keeps scheduled reconciliation alive when a child RPC outlasts the next poll", async () => {
+    vi.useFakeTimers();
+    const startedAt = Date.now();
+    const { request, statuses, initialized } = await contexts();
+    const pending: { at: number; action: string }[] = [];
+    request.schedule.after = async (delay, action) => {
+      pending.push({ at: Date.now() + delay, action });
+      pending.sort((left, right) => left.at - right.at);
+      return "scheduled";
+    };
+    // Deliver only the actor's own durable schedule, without status polling or
+    // another client waking it. The harness permits overlapping action delivery.
+    const deliverNext = () => {
+      const scheduled = pending.shift();
+      expect(scheduled).toBeDefined();
+      expect(scheduled!.action).toBe("tick");
+      vi.setSystemTime(Math.max(Date.now(), scheduled!.at));
+      return scrubRequest.config.actions.tick(request);
+    };
+    mocks.entries = [
+      "aaaaaaaaaaa",
+      "bbbbbbbbbbb",
+      "ccccccccccc",
+      "ddddddddddd",
+    ].map((id, position) => ({
+      id,
+      title: id,
+      url: `https://youtu.be/${id}`,
+      position,
+    }));
+    const original = request.client() as JobActorClient;
+    let blockNext = false;
+    let entered!: () => void;
+    let release!: () => void;
+    const childEntered = new Promise<void>((resolveEntered) => {
+      entered = resolveEntered;
+    });
+    const childReleased = new Promise<void>((resolveReleased) => {
+      release = resolveReleased;
+    });
+    request.client = () => ({
+      ...original,
+      scrubVideo: {
+        ...original.scrubVideo,
+        getOrCreate: (key: string[]) => ({
+          ...original.scrubVideo.getOrCreate(key),
+          getStatus: async () => {
+            if (blockNext && key[1] === "aaaaaaaaaaa") {
+              blockNext = false;
+              entered();
+              await childReleased;
+            }
+            return statuses.get(key[1]) ?? null;
+          },
+        }),
+      },
+    });
+    await scrubRequest.config.actions.start(request, {
+      url: "https://youtube.com/playlist?list=PL123",
+      concurrency: 2,
+    });
+    await enumerateRequest(request);
+    await deliverNext();
+    expect(initialized).toEqual(["aaaaaaaaaaa", "bbbbbbbbbbb"]);
+
+    blockNext = true;
+    const slowReconciliation = deliverNext();
+    await childEntered;
+    expect(request.vars.ticking).toBe(true);
+    // Both startup schedules have exactly one successor at the two-second poll.
+    expect(pending).toHaveLength(2);
+    while (pending[0]?.at <= startedAt + 2_000) await deliverNext();
+    expect(pending).toHaveLength(2);
+    expect(
+      pending.every((scheduled) => scheduled.at === startedAt + 4_000)
+    ).toBe(true);
+
+    vi.setSystemTime(startedAt + 3_000);
+    release();
+    await slowReconciliation;
+    for (const id of initialized)
+      statuses.set(id, {
+        status: "completed",
+        stage: "completed",
+        progress: 100,
+        attempts: 1,
+      });
+    // Its surviving scheduled successor observes completion and dispatches the
+    // remaining pair. Nothing outside the actor invokes reconciliation here.
+    await deliverNext();
+    expect(initialized).toEqual([
+      "aaaaaaaaaaa",
+      "bbbbbbbbbbb",
+      "ccccccccccc",
+      "ddddddddddd",
+    ]);
+    expect(pending).toHaveLength(2);
+    expect(
+      await request.db.execute<{ status: string; count: number }>(
+        "SELECT status, COUNT(*) AS count FROM members GROUP BY status ORDER BY status"
+      )
+    ).toEqual([
+      { status: "completed", count: 2 },
+      { status: "queued", count: 2 },
+    ]);
+  });
+
+  it("does not extend a busy tick chain for terminal or missing requests", async () => {
+    const { request, scheduled } = await contexts();
+    request.vars.ticking = true;
+    expect(await scrubRequest.config.actions.tick(request)).toBeNull();
+    expect(scheduled).toEqual([]);
+    request.vars.ticking = false;
+    await scrubRequest.config.actions.start(request, { url: source.url });
+    await scrubRequest.config.actions.cancel(request);
+    scheduled.length = 0;
+    request.vars.ticking = true;
+    expect(await scrubRequest.config.actions.tick(request)).toMatchObject({
+      status: "cancelled",
+    });
+    expect(scheduled).toEqual([]);
+    expect(request.vars.ticking).toBe(true);
+  });
+
+  it("requires durable rearming acknowledgment without clearing another tick's ownership", async () => {
+    const { request } = await contexts();
+    await scrubRequest.config.actions.start(request, { url: source.url });
+    request.vars.ticking = true;
+    const failure = new Error("Schedule persistence unavailable");
+    request.schedule.after = vi.fn(async () => {
+      throw failure;
+    });
+    await expect(scrubRequest.config.actions.tick(request)).rejects.toBe(
+      failure
+    );
+    expect(request.schedule.after).toHaveBeenCalledOnce();
+    expect(request.vars.ticking).toBe(true);
+  });
+
   it("persists SDK policy rejection metadata as a failed unstarted member", async () => {
     const { request } = await contexts();
     const client = request.client();
