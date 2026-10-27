@@ -1,29 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type {
   MediaMetadata,
   SummaryResult,
   VisualAnalysis,
-} from "../../src/types/index.js";
-import type { TranscriptionResult } from "../../src/transcription/ITranscriber.js";
-
-// renderSummaryMarkdown reads config.getOutput().includeFullTranscript — mock it
-// so the test doesn't depend on the user's real ~/.scrub/config.json.
-vi.mock("../../src/infrastructure/Config.js", () => ({
-  config: {
-    getOutput: vi.fn(() => ({
-      directory: "./out",
-      includeFullTranscript: false,
-    })),
-  },
-}));
-
+  TranscriptionResult,
+} from "../../src/core/models.js";
 import {
   buildSummaryPrompt,
   formatVisuals,
   SUMMARY_SCHEMA,
   renderSummaryMarkdown,
 } from "../../src/core/summary-template.js";
-import { config } from "../../src/infrastructure/Config.js";
 
 const metadata: MediaMetadata = {
   contentId: "abc",
@@ -52,7 +39,11 @@ function fullSummary(): SummaryResult {
     structureMap: [],
     openQuestions: [],
     notableQuotes: [],
-    biasAnalysis: { perspective: "pro-hooks", possibleBiases: [], blindSpots: [] },
+    biasAnalysis: {
+      perspective: "pro-hooks",
+      possibleBiases: [],
+      blindSpots: [],
+    },
     knowledgeGraph: {
       topics: ["React"],
       people: [],
@@ -60,7 +51,11 @@ function fullSummary(): SummaryResult {
       technologies: ["React"],
       relationships: [],
     },
-    difficulty: { level: "beginner", prerequisites: [], targetAudience: "devs" },
+    difficulty: {
+      level: "beginner",
+      prerequisites: [],
+      targetAudience: "devs",
+    },
     reusabilityPrompts: {},
     confidence: { level: "high", reasoning: "clear" },
     sections: [
@@ -133,7 +128,12 @@ describe("buildSummaryPrompt", () => {
 describe("formatVisuals", () => {
   it("omits the Text/Code line when extractedText is empty", () => {
     const out = formatVisuals([
-      { timestamp: 0, description: "talking head", extractedText: "", visualType: "talking-head" },
+      {
+        timestamp: 0,
+        description: "talking head",
+        extractedText: "",
+        visualType: "talking-head",
+      },
     ]);
     expect(out).toContain("(talking-head)");
     expect(out).toContain("Description: talking head");
@@ -164,11 +164,44 @@ describe("SUMMARY_SCHEMA", () => {
 });
 
 describe("renderSummaryMarkdown", () => {
-  beforeEach(() => {
-    vi.mocked(config.getOutput).mockReturnValue({
-      directory: "./out",
-      includeFullTranscript: false,
-    });
+  it("renders explicit timestamps without consulting the ambient clock", () => {
+    vi.useFakeTimers();
+    try {
+      const options = { generatedAt: "2026-10-26T12:34:56.000Z" };
+      vi.setSystemTime(new Date("2020-01-01T00:00:00.000Z"));
+      const first = renderSummaryMarkdown(
+        metadata,
+        fullSummary(),
+        undefined,
+        options
+      );
+      vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
+      const second = renderSummaryMarkdown(
+        metadata,
+        fullSummary(),
+        undefined,
+        options
+      );
+      expect(first).toBe(second);
+      expect(first).toContain("**Processed:** 2026-10-26");
+      expect(first).toContain("on 2026-10-26T12:34:56.000Z");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses a deterministic timestamp when compatibility callers omit context", () => {
+    expect(renderSummaryMarkdown(metadata, fullSummary())).toContain(
+      "on 1970-01-01T00:00:00.000Z"
+    );
+  });
+
+  it("rejects invalid timestamp context", () => {
+    expect(() =>
+      renderSummaryMarkdown(metadata, fullSummary(), undefined, {
+        generatedAt: "today",
+      })
+    ).toThrow("generatedAt must");
   });
 
   it("renders headers, badges, sections, code blocks, and reference links", () => {
@@ -184,7 +217,7 @@ describe("renderSummaryMarkdown", () => {
     expect(md).toContain("- Some Book"); // non-url → plain
   });
 
-  it("appends the full transcript only when config opts in", () => {
+  it("appends the full transcript only when options opt in", () => {
     const transcript: TranscriptionResult = {
       segments: [{ start: 0, end: 5, text: "hello there" }],
       fullText: "hello there",
@@ -196,11 +229,10 @@ describe("renderSummaryMarkdown", () => {
     const without = renderSummaryMarkdown(metadata, fullSummary(), transcript);
     expect(without).not.toContain("## Full Transcript");
 
-    vi.mocked(config.getOutput).mockReturnValue({
-      directory: "./out",
+    const withT = renderSummaryMarkdown(metadata, fullSummary(), transcript, {
+      generatedAt: "2026-10-26T12:00:00.000Z",
       includeFullTranscript: true,
     });
-    const withT = renderSummaryMarkdown(metadata, fullSummary(), transcript);
     expect(withT).toContain("## Full Transcript");
     expect(withT).toContain("hello there");
   });

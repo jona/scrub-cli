@@ -15,7 +15,7 @@ vi.mock("../../src/infrastructure/Config.js", () => ({
   },
 }));
 
-import { extractFrames } from "../../src/core/extract-frames.js";
+import { extractFrames } from "../../src/infrastructure/node/extract-frames.js";
 import { commandExists } from "../../src/utils/helpers.js";
 
 describe("extractFrames guard clauses", () => {

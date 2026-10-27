@@ -2,9 +2,9 @@
   "name": "scrub-cli",
   "version": "0.2.1",
   "description": "Turn audio and video into deterministic, model-agnostic knowledge artifacts for AI agents.",
-  "main": "dist/entrypoints/cli/index.js",
+  "main": "dist/index.js",
   "bin": {
-    "scrub": "dist/entrypoints/cli/index.js"
+    "scrub": "dist/deployments/local/cli.js"
   },
   "files": [
     "dist"
@@ -17,17 +17,19 @@
   "type": "module",
   "scripts": {
     "prebuild": "npm run clean",
-    "postbuild": "chmod +x dist/entrypoints/cli/index.js",
+    "postbuild": "chmod +x dist/deployments/local/cli.js",
+    "prepack": "npm run build",
     "build": "tsc",
-    "start": "node dist/entrypoints/cli/index.js",
-    "dev": "tsx src/entrypoints/cli/index.ts",
+    "start": "node dist/deployments/local/cli.js",
+    "dev": "tsx src/deployments/local/cli.ts",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest",
     "test:e2e": "INCLUDE_E2E=1 vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "typecheck:portable": "tsc -p tsconfig.portable.json --noEmit"
   },
   "keywords": [
     "youtube",
@@ -72,5 +74,15 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/entrypoints/cli/index.d.ts",
+      "import": "./dist/entrypoints/cli/index.js"
+    }
   }
 }

@@ -13,7 +13,7 @@ vi.mock("../../src/infrastructure/Config.js", () => ({
   },
 }));
 
-import { renderSummaryFile } from "../../src/core/render.js";
+import { renderSummaryFile } from "../../src/infrastructure/node/render.js";
 
 let dir: string;
 
@@ -30,7 +30,13 @@ function minimalSummary(): SummaryResult {
     openQuestions: [],
     notableQuotes: [],
     biasAnalysis: { perspective: "", possibleBiases: [], blindSpots: [] },
-    knowledgeGraph: { topics: [], people: [], tools: [], technologies: [], relationships: [] },
+    knowledgeGraph: {
+      topics: [],
+      people: [],
+      tools: [],
+      technologies: [],
+      relationships: [],
+    },
     difficulty: { level: "beginner", prerequisites: [], targetAudience: "" },
     reusabilityPrompts: {},
     confidence: { level: "high", reasoning: "" },

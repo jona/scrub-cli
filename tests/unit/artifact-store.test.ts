@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { config } from "../../src/infrastructure/Config.js";
-import { ArtifactStore } from "../../src/services/ArtifactStore.js";
+import { ArtifactStore } from "../../src/infrastructure/filesystem/ArtifactStore.js";
 import type { SummaryResult, SceneFrame } from "../../src/types/index.js";
 
 let root: string;
@@ -22,7 +22,13 @@ function minimalSummary(): SummaryResult {
     openQuestions: [],
     notableQuotes: [],
     biasAnalysis: { perspective: "", possibleBiases: [], blindSpots: [] },
-    knowledgeGraph: { topics: [], people: [], tools: [], technologies: [], relationships: [] },
+    knowledgeGraph: {
+      topics: [],
+      people: [],
+      tools: [],
+      technologies: [],
+      relationships: [],
+    },
     difficulty: { level: "beginner", prerequisites: [], targetAudience: "" },
     reusabilityPrompts: {},
     confidence: { level: "high", reasoning: "" },
@@ -67,7 +73,9 @@ describe("ArtifactStore directory creation", () => {
 
 describe("ArtifactStore deterministic writers", () => {
   it("savePrompt writes both the prompt and the schema and returns the prompt path", () => {
-    const promptPath = store.savePrompt("v3", "PROMPT BODY", { type: "object" });
+    const promptPath = store.savePrompt("v3", "PROMPT BODY", {
+      type: "object",
+    });
     const base = store.getVideoDir("v3");
 
     expect(promptPath).toBe(join(base, "prompt", "summary.prompt.md"));

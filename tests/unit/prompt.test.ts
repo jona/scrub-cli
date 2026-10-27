@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { buildPromptArtifacts } from "../../src/core/prompt.js";
+import { buildPromptArtifacts } from "../../src/infrastructure/node/prompt.js";
 import type { MediaMetadata } from "../../src/types/index.js";
 
 let dir: string;

@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
-import { Box, Text, Newline } from "ink";
+import { useState, useEffect, useRef } from "react";
+import { Box, Text, Newline, useApp, useInput, useStdin } from "ink";
 import { PlaylistProgress } from "./PlaylistProgress.js";
-import {
-  processYouTubePlaylist,
-  type YouTubePlaylistOptions,
-} from "../../../orchestrators/youtube.js";
+import type { CliDependencies } from "../dependencies.js";
+type YouTubePlaylistOptions = Parameters<
+  CliDependencies["processYouTubePlaylist"]
+>[1];
 import type {
   PlaylistVideoStatus,
   PlaylistVideoStatusType,
@@ -13,14 +13,30 @@ import type {
 
 interface AppProps {
   url: string;
-  options: Omit<YouTubePlaylistOptions, "onStart" | "onProgress">;
+  options: Omit<NonNullable<YouTubePlaylistOptions>, "onStart" | "onProgress">;
+  processPlaylist: CliDependencies["processYouTubePlaylist"];
   onComplete?: (result: PlaylistProcessResult) => void;
   onError?: (error: Error) => void;
 }
 
 type AppState = "loading" | "processing" | "completed" | "error";
 
-export function App({ url, options, onComplete, onError }: AppProps) {
+export function App({
+  url,
+  options,
+  processPlaylist,
+  onComplete,
+  onError,
+}: AppProps) {
+  const { exit } = useApp();
+  const { isRawModeSupported } = useStdin();
+  const cancellation = useRef<AbortController | null>(null);
+  useInput(
+    (input, key) => {
+      if (key.ctrl && input === "c") cancellation.current?.abort();
+    },
+    { isActive: isRawModeSupported === true }
+  );
   const [state, setState] = useState<AppState>("loading");
   const [videos, setVideos] = useState<PlaylistVideoStatus[]>([]);
   const [total, setTotal] = useState(0);
@@ -28,11 +44,19 @@ export function App({ url, options, onComplete, onError }: AppProps) {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+    cancellation.current = controller;
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, controller.signal])
+      : controller.signal;
+    let active = true;
     async function run() {
       try {
-        const processResult = await processYouTubePlaylist(url, {
+        const processResult = await processPlaylist(url, {
           ...options,
+          signal,
           onStart: (initialVideos, count) => {
+            if (!active) return;
             setVideos(initialVideos);
             setTotal(count);
             setState("processing");
@@ -42,6 +66,7 @@ export function App({ url, options, onComplete, onError }: AppProps) {
             status: PlaylistVideoStatusType,
             stage?: string
           ) => {
+            if (!active) return;
             setVideos((prev) =>
               prev.map((v) =>
                 v.contentId === contentId ? { ...v, status, stage } : v
@@ -50,10 +75,12 @@ export function App({ url, options, onComplete, onError }: AppProps) {
           },
         });
 
+        if (!active) return;
         setResult(processResult);
         setState("completed");
         onComplete?.(processResult);
       } catch (err) {
+        if (!active) return;
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         setState("error");
@@ -61,8 +88,17 @@ export function App({ url, options, onComplete, onError }: AppProps) {
       }
     }
 
-    run();
-  }, [url, options, onComplete, onError]);
+    void run();
+    return () => {
+      active = false;
+      controller.abort();
+      if (cancellation.current === controller) cancellation.current = null;
+    };
+  }, [url, options, processPlaylist, onComplete, onError]);
+
+  useEffect(() => {
+    if (state === "completed" || state === "error") exit();
+  }, [state, exit]);
 
   return (
     <Box flexDirection="column">

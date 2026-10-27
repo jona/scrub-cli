@@ -2,7 +2,7 @@ import { execa, type ExecaError } from "execa";
 import { join } from "path";
 import { TEST_OUTPUT_DIR } from "../e2e/setup.js";
 
-const CLI_PATH = join(process.cwd(), "dist", "entrypoints", "cli", "index.js");
+const CLI_PATH = join(process.cwd(), "dist", "deployments", "local", "cli.js");
 const COMMANDS_WITH_OUTPUT_DIR = new Set(["youtube", "file"]);
 
 export interface CLIResult {
