@@ -29,12 +29,15 @@
     "test": "vitest",
     "test:e2e": "INCLUDE_E2E=1 vitest run",
     "test:coverage": "vitest run --coverage",
+    "start:rivet": "node dist/deployments/rivet/main.js",
     "verify:rivet": "node --env-file=.env.rivet.local scripts/rivet/verify.mjs",
     "verify:rivet:concurrency": "node --env-file=.env.rivet.local scripts/rivet/verify-concurrency.mjs",
     "verify:rivet:full": "node --env-file=.env.rivet.local scripts/rivet/verify-full.mjs",
     "credentials:rivet": "node --env-file=.env.rivet.local scripts/rivet/credentials.mjs",
     "job:rivet": "node --env-file=.env.rivet.local scripts/rivet/job.mjs",
-    "typecheck:portable": "tsc -p tsconfig.portable.json --noEmit"
+    "typecheck:portable": "tsc -p tsconfig.portable.json --noEmit",
+    "start:api": "node dist/deployments/local/api.js",
+    "start:mcp": "node dist/deployments/local/mcp.js"
   },
   "keywords": [
     "youtube",
@@ -92,6 +95,10 @@
     "./api": {
       "types": "./dist/entrypoints/api/handler.d.ts",
       "import": "./dist/entrypoints/api/handler.js"
+    },
+    "./mcp": {
+      "types": "./dist/entrypoints/mcp/index.d.ts",
+      "import": "./dist/entrypoints/mcp/index.js"
     },
     "./local": {
       "types": "./dist/deployments/local/application.d.ts",
