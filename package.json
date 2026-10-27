@@ -30,6 +30,7 @@
     "test:e2e": "INCLUDE_E2E=1 vitest run",
     "test:coverage": "vitest run --coverage",
     "start:rivet": "node dist/deployments/rivet/main.js",
+    "prepare:rivet:image": "node scripts/rivet/prepare-image.mjs",
     "verify:rivet": "node --env-file=.env.rivet.local scripts/rivet/verify.mjs",
     "verify:rivet:concurrency": "node --env-file=.env.rivet.local scripts/rivet/verify-concurrency.mjs",
     "verify:rivet:full": "node --env-file=.env.rivet.local scripts/rivet/verify-full.mjs",
@@ -37,7 +38,8 @@
     "job:rivet": "node --env-file=.env.rivet.local scripts/rivet/job.mjs",
     "typecheck:portable": "tsc -p tsconfig.portable.json --noEmit",
     "start:api": "node dist/deployments/local/api.js",
-    "start:mcp": "node dist/deployments/local/mcp.js"
+    "start:mcp": "node dist/deployments/local/mcp.js",
+    "build:image": "docker buildx bake --file docker-bake.hcl"
   },
   "keywords": [
     "youtube",
