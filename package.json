@@ -30,6 +30,8 @@
     "test:e2e": "INCLUDE_E2E=1 vitest run",
     "test:coverage": "vitest run --coverage",
     "start:rivet": "node dist/deployments/rivet/main.js",
+    "update:ytdlp:image": "node scripts/image/update-ytdlp.mjs",
+    "preprepare:rivet:image": "npm run update:ytdlp:image",
     "prepare:rivet:image": "node scripts/rivet/prepare-image.mjs",
     "verify:rivet": "node --env-file=.env.rivet.local scripts/rivet/verify.mjs",
     "verify:rivet:concurrency": "node --env-file=.env.rivet.local scripts/rivet/verify-concurrency.mjs",
@@ -40,6 +42,7 @@
     "typecheck:portable": "tsc -p tsconfig.portable.json --noEmit",
     "start:api": "node dist/deployments/local/api.js",
     "start:mcp": "node dist/deployments/local/mcp.js",
+    "prebuild:image": "npm run update:ytdlp:image",
     "build:image": "docker buildx bake --file docker-bake.hcl"
   },
   "keywords": [

@@ -40,7 +40,9 @@ npm run build
 npm link
 
 # macOS native tools
-brew install yt-dlp ffmpeg
+brew install ffmpeg uv
+uv tool install --upgrade 'yt-dlp[default]' --default-index https://pypi.org/simple
+yt-dlp --version
 
 # Optional Python transcription
 pip install faster-whisper
@@ -49,6 +51,13 @@ pip install faster-whisper
 Run `scrub doctor` to inspect tools/settings, or `scrub transcribers` to inspect
 adapters. Local Whisper can be configured with an executable path and model
 directory. The Rivet image supplies its own tools and base model.
+Before YouTube processing or retries, check the latest stable yt-dlp release and
+upgrade the executable Scrub uses. For pip installations, use
+`python3 -m pip install --upgrade 'yt-dlp[default]'` in its owning environment.
+If using Homebrew's yt-dlp, run `brew update` and `brew upgrade yt-dlp`, then
+compare its version with upstream; Homebrew can lag official releases. The
+isolated `uv tool` installation above uses PyPI directly. Ensure its executable
+directory is on PATH before an older installation.
 Set `SCRUB_PYTHON_PATH` to the Python executable containing `faster-whisper` when
 it is installed in a different environment from the `python3` on your PATH.
 
@@ -718,7 +727,15 @@ These build assets and helpers are separate from the published npm package.
 Build the application with `npm run build`, or start the Rivet composition with
 `npm run start:rivet`. A Rivet image uses the `rivet-api` Bake profile to select its
 startup module and dependency cleanup hook. The Docker image includes FFmpeg/FFprobe, Python,
-`yt-dlp==2026.10.21`, `faster-whisper==1.2.1`, and a downloaded base model. Other
+the latest stable yt-dlp resolved at build preparation, `faster-whisper==1.2.1`,
+and a downloaded base model. `npm run build:image` and
+`npm run prepare:rivet:image` check official PyPI metadata and refresh yt-dlp's
+version and distribution hashes in `deployments/image/requirements.txt` before
+Docker can reuse cached layers. A failed upstream check stops preparation. For a
+raw Docker build, run `npm run update:ytdlp:image` first. The image installation
+still verifies the complete dependency lock and runs `pip check`; a dependency
+change that conflicts with that lock requires refreshing its affected packages.
+A running image keeps its installed version until a new image is deployed. Other
 transcription models require corresponding deployment assets. The default runner
 tries captions and faster-whisper. Hosted providers use injected
 `OPENAI_API_KEY`/`DEEPGRAM_API_KEY` when configured. Vision and summary providers use
