@@ -326,14 +326,21 @@ export async function runVideoPipeline(
     let frameCheckpoint = record.checkpoints.frames;
     if (
       frameCheckpoint &&
-      !(
-        (await artifacts.has(frameCheckpoint.manifest)) &&
-        (
-          await Promise.all(
-            frameCheckpoint.frames.map((f) => artifacts.has(f.artifact))
-          )
-        ).every(Boolean)
-      )
+      (frameCheckpoint.frames.some(
+        (frame) =>
+          !Number.isFinite(frame.timestamp) ||
+          frame.timestamp < 0 ||
+          (prepared.metadata.duration > 0 &&
+            frame.timestamp > prepared.metadata.duration)
+      ) ||
+        !(
+          (await artifacts.has(frameCheckpoint.manifest)) &&
+          (
+            await Promise.all(
+              frameCheckpoint.frames.map((f) => artifacts.has(f.artifact))
+            )
+          ).every(Boolean)
+        ))
     )
       frameCheckpoint = undefined;
     if (!frameCheckpoint) {
@@ -341,7 +348,8 @@ export async function runVideoPipeline(
         prepared.video,
         settings,
         { ...dependencies, artifacts },
-        context
+        context,
+        prepared.metadata.duration
       );
       const { frames } = frameCheckpoint;
       const previousFrames = record.checkpoints.frames?.frames;

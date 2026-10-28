@@ -445,6 +445,48 @@ describe("semantic native media adapter", () => {
     expect(await readdir(join(root, "stage"))).toEqual([]);
   });
 
+  it("forwards the declared source timeline while preserving valid frame artifacts", async () => {
+    const root = await temporary();
+    const storage = new FilesystemArtifactStorage(join(root, "store"));
+    const input = await storage.put("video", bytes("video"), "video/mp4");
+    const valid = [44.669625, 78.536792, 106.314542, 123.998875, 154.863042];
+    const run = vi.fn<typeof runCommand>(async (command, args) => {
+      if (command === "probe") return success("167.299773");
+      if (args.includes("-filter:v"))
+        return success(
+          "",
+          [...valid, 167.167].map((value) => `pts_time:${value}\n`).join("")
+        );
+      await writeFile(
+        args.at(-1)!,
+        bytes(`PNG at ${args[args.indexOf("-ss") + 1]}`)
+      );
+      return success();
+    });
+    const media = new NodeMediaProcessor(storage, {
+      stagingRoot: join(root, "stage"),
+      ffprobePath: "probe",
+      runCommand: run,
+    });
+    const current = settings();
+    current.maxFrames = 20;
+    current.limits.maxDurationSeconds = 300;
+    const unbounded = await media.extractFrames(input, current, context());
+    expect(unbounded).toHaveLength(6);
+    run.mockClear();
+    const bounded = await media.extractFrames(input, current, context(), 167);
+    expect(bounded).toEqual(unbounded.slice(0, 5));
+    expect(bounded.map((frame) => frame.timestamp)).toEqual(valid);
+    const seeks = run.mock.calls.filter(([, args]) =>
+      args.includes("-vframes")
+    );
+    expect(seeks).toHaveLength(5);
+    expect(
+      seeks.some(([, args]) => args[args.indexOf("-ss") + 1] === "167.167")
+    ).toBe(false);
+    expect(await readdir(join(root, "stage"))).toEqual([]);
+  });
+
   it("preserves early scene timestamps while streaming excessive ffmpeg diagnostics", async () => {
     const root = await temporary();
     const storage = new FilesystemArtifactStorage(join(root, "store"));

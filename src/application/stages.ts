@@ -147,13 +147,24 @@ export async function extractFramesStage(
   video: ArtifactRef | undefined,
   settings: PipelineSettings,
   dependencies: { artifacts: ArtifactStorage; media: MediaProcessor },
-  context: OperationContext
+  context: OperationContext,
+  sourceDurationSeconds?: number
 ): Promise<{ frames: FrameArtifact[]; manifest: ArtifactRef }> {
   throwIfAborted(context.signal);
+  if (
+    sourceDurationSeconds !== undefined &&
+    (!Number.isFinite(sourceDurationSeconds) || sourceDurationSeconds < 0)
+  )
+    throw new PipelineError("invalid_input", "Invalid source duration");
   if (video) assertArtifactSize(video, settings.limits.maxSourceBytes);
   const frames =
     !settings.skipVisuals && video
-      ? await dependencies.media.extractFrames(video, settings, context)
+      ? await dependencies.media.extractFrames(
+          video,
+          settings,
+          context,
+          sourceDurationSeconds
+        )
       : [];
   throwIfAborted(context.signal);
   if (frames.length > settings.maxFrames)
@@ -166,6 +177,9 @@ export async function extractFramesStage(
       !Number.isFinite(frame.timestamp) ||
       frame.timestamp < 0 ||
       frame.timestamp > settings.limits.maxDurationSeconds ||
+      (sourceDurationSeconds !== undefined &&
+        sourceDurationSeconds > 0 &&
+        frame.timestamp > sourceDurationSeconds) ||
       (frame.score !== undefined && !Number.isFinite(frame.score))
     )
       throw new PipelineError("processing_failed", "Frame output is invalid");

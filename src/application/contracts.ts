@@ -99,7 +99,9 @@ export interface MediaProcessor {
   extractFrames(
     video: ArtifactRef,
     settings: PipelineSettings,
-    context: OperationContext
+    context: OperationContext,
+    /** Known source timeline; zero or omission means the duration is unknown. */
+    sourceDurationSeconds?: number
   ): Promise<FrameArtifact[]>;
 }
 export interface SourceCatalog {

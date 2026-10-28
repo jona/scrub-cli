@@ -25,6 +25,8 @@ export interface ExtractFramesOptions extends NativeOperationOptions {
   minInterval?: number;
   /** Full inference needs a representative frame even for a short static clip. */
   ensureFrame?: boolean;
+  /** Known source timeline; zero or omission means only the media probe is known. */
+  sourceDurationSeconds?: number;
   onProgress?: (message: string) => void;
 }
 
@@ -80,7 +82,10 @@ async function detectAndExtractFrames(
     maxFrames: number;
     minInterval: number;
     onProgress?: (message: string) => void;
-    operation: NativeOperationOptions & { ensureFrame?: boolean };
+    operation: NativeOperationOptions & {
+      ensureFrame?: boolean;
+      sourceDurationSeconds?: number;
+    };
   }
 ): Promise<SceneFrame[]> {
   const { threshold, maxFrames, minInterval, onProgress, operation } = options;
@@ -88,22 +93,38 @@ async function detectAndExtractFrames(
   const logger = operation.runtime?.logger ?? silentLogger;
 
   // Get video duration
-  const duration = await getVideoDuration(videoPath, operation);
-  if (duration > (operation.maxDurationSeconds ?? Infinity))
+  const probedDuration = await getVideoDuration(videoPath, operation);
+  if (probedDuration > (operation.maxDurationSeconds ?? Infinity))
     throw new PipelineError(
       "resource_limit",
       "Video duration exceeds the configured limit"
     );
-  logger.debug(`Video duration: ${duration}s`);
+  const sourceDuration = operation.sourceDurationSeconds;
+  if (
+    sourceDuration !== undefined &&
+    (!Number.isFinite(sourceDuration) || sourceDuration < 0)
+  )
+    throw new PipelineError(
+      "invalid_input",
+      "Source duration must be finite and nonnegative"
+    );
+  const duration =
+    sourceDuration !== undefined && sourceDuration > 0
+      ? Math.min(probedDuration, sourceDuration)
+      : probedDuration;
+  logger.debug(`Video duration: ${probedDuration}s`);
 
   // Run scene detection
-  let timestamps = await detectSceneTimestamps(
+  const detected = await detectSceneTimestamps(
     videoPath,
     threshold,
     maxFrames,
     minInterval,
     operation
   );
+  // Containers can include a fractional tail beyond a source's declared
+  // timeline. Drop those candidates rather than changing their timestamps.
+  const timestamps = detected.filter((timestamp) => timestamp <= duration);
   logger.debug(`Detected ${timestamps.length} scene changes`);
 
   // Add periodic frames if too few scenes detected

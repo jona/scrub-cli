@@ -714,6 +714,88 @@ describe("full video pipeline integration", () => {
     ).toMatchObject({ calls: 3 });
   });
 
+  it("repairs a legacy out-of-timeline frame checkpoint without repeating valid paid vision", async () => {
+    const f = fullPipelineFixture();
+    // Stop before the summary call, after native work and one paid vision step
+    // have been durably saved. This supplies the same reusable evidence as a
+    // legacy run that then encountered an invalid fractional tail frame.
+    f.failPublication("prompt/summary");
+    await expect(f.run()).rejects.toMatchObject({ code: "storage_error" });
+    const previous = (await f.runs.get())!;
+    const prepared = previous.checkpoints.acquire!;
+    const validFrame = previous.checkpoints.frames!.frames[0];
+    const inference = previous.checkpoints.inference!;
+    const visionKey = Object.keys(inference.steps)[0];
+    expect(inference.calls).toBe(1);
+    expect(visionKey).toBe(`vision:0:5:${validFrame.artifact.id}`);
+    expect(
+      f.generate.mock.calls.map(([request]) => request.schemaName)
+    ).toEqual(["ScrubFrameAnalysis"]);
+
+    const tail = {
+      timestamp: prepared.metadata.duration + 0.167,
+      artifact: await f.storage.put(
+        "frames/image",
+        new Uint8Array([0]),
+        "image/png"
+      ),
+    };
+    const legacyFrames = [validFrame, tail];
+    const manifest = await f.storage.put(
+      "frames/json",
+      new TextEncoder().encode(JSON.stringify(legacyFrames)),
+      "application/json"
+    );
+    await f.runs.update((current) => ({
+      ...current!,
+      stage: "vision",
+      failure: {
+        code: "processing_failed",
+        message: "Frame has an invalid source timestamp",
+        stage: "vision",
+        retryable: false,
+      },
+      checkpoints: {
+        ...current!.checkpoints,
+        frames: { frames: legacyFrames, manifest },
+      },
+    }));
+    // Every old artifact is still present; the declared timeline is what must
+    // invalidate the checkpoint. Re-extraction retains the valid frame bytes.
+    expect(await f.storage.has(tail.artifact)).toBe(true);
+    expect(await f.storage.has(manifest)).toBe(true);
+    f.failPublication(null);
+    f.media.extractFrames.mockResolvedValueOnce([validFrame]);
+
+    const repaired = await f.run();
+    expect(f.media.extractFrames).toHaveBeenNthCalledWith(
+      2,
+      prepared.video,
+      f.settings,
+      f.context,
+      prepared.metadata.duration
+    );
+    expect(f.media.acquire).toHaveBeenCalledOnce();
+    expect(f.transcriber.transcribe).toHaveBeenCalledOnce();
+    expect(f.media.extractFrames).toHaveBeenCalledTimes(2);
+    expect(repaired.frames).toEqual([validFrame]);
+    expect(await readArtifactJson(f.storage, repaired.framesManifest!)).toEqual(
+      [validFrame]
+    );
+    expect(
+      f.generate.mock.calls.map(([request]) => request.schemaName)
+    ).toEqual(["ScrubFrameAnalysis", "ScrubSummary"]);
+    const completed = (await f.runs.get())!;
+    expect(completed.status).toBe("completed");
+    expect(completed.checkpoints.inference!.calls).toBe(2);
+    expect(completed.checkpoints.inference!.steps[visionKey]).toEqual(
+      inference.steps[visionKey]
+    );
+    expect(
+      await readArtifactJson(f.storage, repaired.inference!.modelUsage)
+    ).toMatchObject({ calls: 2 });
+  });
+
   it("fails full-mode preflight before media work and persists the failed run when no models are configured", async () => {
     const f = fullPipelineFixture();
     await expect(

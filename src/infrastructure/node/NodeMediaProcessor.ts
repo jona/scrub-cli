@@ -143,7 +143,8 @@ export class NodeMediaProcessor implements MediaProcessor {
   async extractFrames(
     video: ArtifactRef,
     settings: PipelineSettings,
-    context: OperationContext
+    context: OperationContext,
+    sourceDurationSeconds?: number
   ): Promise<FrameArtifact[]> {
     return withNativeDeadline(
       context,
@@ -169,6 +170,7 @@ export class NodeMediaProcessor implements MediaProcessor {
               maxFrames: settings.maxFrames,
               minInterval: settings.minFrameInterval,
               ensureFrame: settings.inference?.mode === "full",
+              sourceDurationSeconds,
             });
             const result: FrameArtifact[] = [];
             for (const frame of frames) {

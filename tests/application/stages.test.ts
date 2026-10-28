@@ -297,6 +297,59 @@ describe("shared application stages", () => {
     ).rejects.toMatchObject({ code: "resource_limit" });
   });
 
+  it("passes the declared source duration to extraction and rejects a fractional tail beyond that timeline", async () => {
+    const f = fixture();
+    const acquired = await acquireMediaStage(
+      f.source,
+      f.settings,
+      f.dependencies,
+      f.context
+    );
+    const frame = {
+      timestamp: metadata.duration,
+      artifact: await f.artifacts.put(
+        "frames/image",
+        new Uint8Array([5, 6]),
+        "image/png"
+      ),
+    };
+    f.media.extractFrames.mockResolvedValueOnce([frame]);
+    const extracted = await extractFramesStage(
+      acquired.video,
+      f.settings,
+      f.dependencies,
+      f.context,
+      metadata.duration
+    );
+    expect(f.media.extractFrames).toHaveBeenCalledWith(
+      acquired.video,
+      f.settings,
+      f.context,
+      metadata.duration
+    );
+    expect(await readArtifactJson(f.artifacts, extracted.manifest)).toEqual([
+      frame,
+    ]);
+
+    const put = vi.spyOn(f.artifacts, "put");
+    f.media.extractFrames.mockResolvedValueOnce([
+      { ...frame, timestamp: metadata.duration + 0.167 },
+    ]);
+    await expect(
+      extractFramesStage(
+        acquired.video,
+        f.settings,
+        f.dependencies,
+        f.context,
+        metadata.duration
+      )
+    ).rejects.toMatchObject({
+      code: "processing_failed",
+      message: "Frame output is invalid",
+    });
+    expect(put).not.toHaveBeenCalled();
+  });
+
   it("validates manual prompt inputs and byte caps as it does pipeline publication", async () => {
     const f = fixture();
     await expect(
