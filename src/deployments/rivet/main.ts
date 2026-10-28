@@ -33,6 +33,8 @@ import {
 } from "../../infrastructure/rivet/credentials.js";
 import { LangSmithModelTracing } from "../../infrastructure/observability/LangSmithModelTracing.js";
 import { resolveLangSmithTracingConfig } from "../tracing-config.js";
+import { createNativeDiagnostics } from "../native-diagnostics.js";
+import { configureRivetDiagnostics } from "../../infrastructure/rivet/diagnostics.js";
 
 const port = parsePort(process.env.PORT, 8080);
 const metricsPort = parsePort(process.env.RIVETKIT_METRICS_PORT, 9464);
@@ -60,6 +62,7 @@ console.info(
   `Scrub models configured: summary=${modelConfig.defaults.summary?.provider}/${modelConfig.defaults.summary?.model}, vision=${modelConfig.defaults.vision?.provider}/${modelConfig.defaults.vision?.model}`
 );
 configureRivetCredentials(process.env.RIVET_TOKEN);
+configureRivetDiagnostics(process.env.RIVET_TOKEN);
 const credentialSource = process.env.SCRUB_MODEL_CREDENTIAL_SOURCE ?? "rivet";
 if (!["environment", "rivet"].includes(credentialSource))
   throw new Error("Invalid SCRUB_MODEL_CREDENTIAL_SOURCE");
@@ -106,6 +109,13 @@ configureRivetJobs(
     ).split(","),
     openaiApiKey: process.env.OPENAI_API_KEY,
     deepgramApiKey: process.env.DEEPGRAM_API_KEY,
+    diagnostics: createNativeDiagnostics(
+      () => process.env,
+      () =>
+        Object.values(tracingCredentials).filter(
+          (value): value is string => typeof value === "string"
+        )
+    ),
   },
   concurrency
 );

@@ -1,10 +1,117 @@
 /** Node yt-dlp implementation. Portable callers use MediaProcessor. */
-import { runCommand } from "../../utils/helpers.js";
+import {
+  runCommand,
+  getCommandFailureDiagnostics,
+} from "../../utils/helpers.js";
 import { canonicalizeYouTubeVideo, extractVideoId } from "../../core/source.js";
 import { PipelineError } from "../../core/errors.js";
 import type { MediaMetadata } from "../../core/models.js";
 import type { PrepareResult } from "../../types/index.js";
 import type { NativeOperationOptions } from "./runtime.js";
+import {
+  queueNativeCommandDiagnostic,
+  type NativeCommandDiagnostic,
+  type NativeCommandErrorCode,
+} from "./diagnostics.js";
+
+type CommandResult = Awaited<ReturnType<typeof runCommand>>;
+async function runDownloader(
+  operation: NativeCommandDiagnostic["operation"],
+  url: string,
+  args: string[],
+  options: NativeOperationOptions & { stdoutMode?: "tail" }
+): Promise<{
+  result: CommandResult;
+  diagnose: (code: NativeCommandErrorCode) => void;
+}> {
+  const started = performance.now();
+  let stderr = "";
+  let truncated = false;
+  let result: CommandResult | undefined;
+  let failure: ReturnType<typeof getCommandFailureDiagnostics>;
+  const diagnose = (errorCode: NativeCommandErrorCode) => {
+    let text = failure?.stderr ?? (stderr || result?.stderr || "");
+    const cut = truncated || failure?.stderrTruncated === true;
+    // A retained tail can start inside an unknown cookie/header value. Discard
+    // that partial line rather than expose an unlabelled credential fragment.
+    if (cut)
+      text = text.includes("\n") ? text.slice(text.indexOf("\n") + 1) : "";
+    queueNativeCommandDiagnostic(
+      {
+        version: 1,
+        event: "native_command_failed",
+        tool: "yt-dlp",
+        operation,
+        sourceId: extractVideoId(url)!,
+        timestamp: new Date().toISOString(),
+        elapsedMs: Math.max(0, performance.now() - started),
+        errorCode,
+        stderr: text,
+        stderrTruncated: cut,
+        ...(result
+          ? {
+              exitCode: result.code,
+              ...(result.signal ? { signal: result.signal } : {}),
+            }
+          : failure
+            ? {
+                ...(failure.code === undefined
+                  ? {}
+                  : { exitCode: failure.code }),
+                ...(failure.signal === undefined
+                  ? {}
+                  : { signal: failure.signal }),
+              }
+            : {}),
+        ...options.diagnosticContext,
+      },
+      options.runtime?.diagnostics,
+      options.runtime?.logger
+    );
+  };
+  try {
+    result = await (options.runtime?.runCommand ?? runCommand)(
+      options.runtime?.ytdlpPath ?? "yt-dlp",
+      args,
+      {
+        ...options,
+        onStderr: (text) => {
+          const bytes = Buffer.from(stderr + text);
+          if (bytes.length > 64 * 1024) {
+            truncated = true;
+            let start = bytes.length - 64 * 1024;
+            while (start < bytes.length && (bytes[start] & 0xc0) === 0x80)
+              start++;
+            stderr = bytes.subarray(start).toString("utf8");
+          } else stderr = bytes.toString("utf8");
+        },
+      }
+    );
+    if (result.code !== 0) diagnose("nonzero_exit");
+    return { result, diagnose };
+  } catch (error) {
+    failure = getCommandFailureDiagnostics(error);
+    const errorCode =
+      error instanceof PipelineError
+        ? ((
+            {
+              timeout: "timeout",
+              cancelled: "cancelled",
+              resource_limit: "output_limit",
+            } as const
+          )[error.code as "timeout" | "cancelled" | "resource_limit"] ??
+          "command_failed")
+        : error &&
+            typeof error === "object" &&
+            ["ENOENT", "EACCES", "ENOTDIR"].includes(
+              String((error as { code?: unknown }).code)
+            )
+          ? "spawn_failed"
+          : "command_failed";
+    diagnose(errorCode);
+    throw error;
+  }
+}
 
 export interface DownloadOptions extends NativeOperationOptions {
   outputDir: string;
@@ -19,8 +126,6 @@ export async function download(
 ): Promise<PrepareResult> {
   const url = canonicalizeYouTubeVideo(input);
   const runtime = options.runtime;
-  const run = runtime?.runCommand ?? runCommand;
-  const binary = runtime?.ytdlpPath ?? "yt-dlp";
   const metadata =
     options.metadata ?? (await fetchYouTubeMetadata(url, options));
   if (metadata.duration > (options.maxDurationSeconds ?? Infinity))
@@ -42,8 +147,9 @@ export async function download(
   if (runtime?.ffmpegPath) common.push("--ffmpeg-location", runtime.ffmpegPath);
   const audioPath = `${options.outputDir}/audio.wav`;
   options.onProgress?.("Downloading audio...");
-  const audio = await run(
-    binary,
+  const { result: audio } = await runDownloader(
+    "audio",
+    url,
     [
       ...common,
       "-x",
@@ -67,8 +173,9 @@ export async function download(
   if (!options.skipVideo) {
     options.onProgress?.("Downloading video...");
     const path = `${options.outputDir}/video.mp4`;
-    const video = await run(
-      binary,
+    const { result: video } = await runDownloader(
+      "video",
+      url,
       [
         ...common,
         "-f",
@@ -81,10 +188,17 @@ export async function download(
       { ...options, stdoutMode: "tail" }
     );
     if (video.code === 0) videoPath = path;
-    else
-      runtime?.logger?.warn(
-        "Video download failed; visual extraction will be skipped"
-      );
+    else {
+      try {
+        void Promise.resolve(
+          runtime?.logger?.warn(
+            "Video download failed; visual extraction will be skipped"
+          )
+        ).catch(() => undefined);
+      } catch {
+        /* A logging outage must not turn optional video failure into job failure. */
+      }
+    }
   }
   return { metadata, audioPath, videoPath, cacheDir: options.outputDir };
 }
@@ -93,9 +207,9 @@ export async function fetchYouTubeMetadata(
   options: NativeOperationOptions = {}
 ): Promise<MediaMetadata> {
   const url = canonicalizeYouTubeVideo(input);
-  const run = options.runtime?.runCommand ?? runCommand;
-  const result = await run(
-    options.runtime?.ytdlpPath ?? "yt-dlp",
+  const { result, diagnose } = await runDownloader(
+    "metadata",
+    url,
     [
       "--print",
       "%(.{title,description,duration,thumbnail,channel,upload_date})j",
@@ -116,9 +230,25 @@ export async function fetchYouTubeMetadata(
       retryable: true,
       cause: result.stderr,
     });
-  const raw = JSON.parse(result.stdout);
-  if (!Number.isFinite(raw.duration) || raw.duration < 0)
-    throw new PipelineError("invalid_input", "Source has no finite duration");
+  let raw;
+  try {
+    raw = JSON.parse(result.stdout);
+    if (!Number.isFinite(raw.duration) || raw.duration < 0)
+      throw new PipelineError("invalid_input", "Source has no finite duration");
+  } catch (error) {
+    diagnose(
+      error instanceof PipelineError ? "invalid_duration" : "invalid_metadata"
+    );
+    if (error instanceof PipelineError) throw error;
+    throw new PipelineError(
+      "processing_failed",
+      "Unable to parse source metadata",
+      {
+        retryable: false,
+        cause: error,
+      }
+    );
+  }
   return {
     contentId: extractVideoId(url)!,
     title: String(raw.title ?? "Untitled"),

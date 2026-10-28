@@ -34,7 +34,12 @@ import { canonicalizeYouTubeVideo } from "../../../core/source.js";
 import { PipelineError } from "../../../core/errors.js";
 import { SUMMARY_SCHEMA } from "../../../core/summary-template.js";
 import { buildLocalMetadata, generateContentId } from "../prepare.js";
-import { createLocalAdapters, importLocalSource } from "./pipeline.js";
+import {
+  createLocalAdapters as buildLocalAdapters,
+  importLocalSource,
+  type LocalPipelineOptions,
+} from "./pipeline.js";
+import type { NativeDiagnosticsOptions } from "../runtime.js";
 
 type StageBindings = Pick<
   CliDependencies,
@@ -87,7 +92,14 @@ async function exportFile(
 }
 
 /** Path I/O belongs here; processing and validation belong to application stages. */
-export function createCliStages(): StageBindings {
+export function createCliStages(
+  host: { nativeDiagnostics?: NativeDiagnosticsOptions } = {}
+): StageBindings {
+  const createLocalAdapters = (options: LocalPipelineOptions = {}) =>
+    buildLocalAdapters({
+      ...options,
+      nativeDiagnostics: host.nativeDiagnostics,
+    });
   return {
     async download(url, options) {
       const adapters = createLocalAdapters({

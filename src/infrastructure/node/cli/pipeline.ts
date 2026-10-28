@@ -45,10 +45,12 @@ import type {
   InferenceSettingsInput,
   StructuredModelGateway,
 } from "../../../application/model.js";
+import type { NativeDiagnosticsOptions } from "../runtime.js";
 
 export interface LocalPipelineOptions {
   inference?: InferenceSettingsInput;
   models?: StructuredModelGateway;
+  nativeDiagnostics?: NativeDiagnosticsOptions;
   skipVisuals?: boolean;
   transcriber?: TranscriptionSource;
   sceneThreshold?: number;
@@ -160,6 +162,7 @@ export function createLocalAdapters(options: LocalPipelineOptions = {}) {
     openaiApiKey: config.getApiKey("openai"),
     deepgramApiKey: config.getApiKey("deepgram"),
     logger,
+    diagnostics: options.nativeDiagnostics,
   };
   return {
     ...(options.models ? { models: options.models } : {}),

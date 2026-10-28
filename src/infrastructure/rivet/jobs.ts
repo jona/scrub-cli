@@ -43,6 +43,12 @@ import { NodeMediaProcessor } from "../node/NodeMediaProcessor.js";
 import { NodeTranscriber } from "../node/NodeTranscriber.js";
 import { NodeSourceCatalog } from "../node/NodeSourceCatalog.js";
 import type { NativeRuntimeOptions } from "../node/runtime.js";
+import { flushNativeCommandDiagnostics } from "../node/diagnostics.js";
+import {
+  createRivetNativeDiagnostics,
+  readRivetDiagnostics,
+  type RivetDiagnosticPage,
+} from "./diagnostics.js";
 import {
   RunnerAdmission,
   type RuntimeConcurrencyPolicy,
@@ -226,6 +232,7 @@ interface VideoHandle {
   initialize(input: VideoInitialization): Promise<VideoJobStatus>;
   getStatus(): Promise<VideoJobStatus | null>;
   getResult(): Promise<VideoResult | null>;
+  getDiagnostics(proof: unknown, limit?: number): Promise<RivetDiagnosticPage>;
   cancel(): Promise<VideoJobStatus>;
   retry(): Promise<VideoJobStatus>;
   readArtifact(
@@ -674,6 +681,7 @@ export async function runVideoActor(context: VideoContext): Promise<void> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let lease: ExecutionLease | null = null;
   let owner = "";
+  let attemptDiagnostics: NativeRuntimeOptions["diagnostics"];
   const controller = new AbortController();
   context.vars.controller = controller;
   const abort = () => controller.abort(context.abortSignal.reason);
@@ -739,11 +747,20 @@ export async function runVideoActor(context: VideoContext): Promise<void> {
       now: Date.now,
       emit: () => undefined,
     };
+    attemptDiagnostics = createRivetNativeDiagnostics(
+      context.db,
+      nativeOptions.diagnostics,
+      operation
+    );
+    const mediaOptions: NativeRuntimeOptions = {
+      ...nativeOptions,
+      diagnostics: attemptDiagnostics,
+    };
     await service.execute(
       {
         artifacts,
         runs,
-        media: new NodeMediaProcessor(artifacts, nativeOptions),
+        media: new NodeMediaProcessor(artifacts, mediaOptions),
         transcriber: new NodeTranscriber(artifacts, nativeOptions),
       },
       operation,
@@ -758,6 +775,15 @@ export async function runVideoActor(context: VideoContext): Promise<void> {
     stopMaintenance?.();
     if (timeout) clearTimeout(timeout);
     context.abortSignal.removeEventListener("abort", abort);
+    // Core outcomes are already durable. Drain diagnostics after its deadlines
+    // are cleared, while the actor still owns this attempt and stays awake.
+    if (attemptDiagnostics) {
+      try {
+        await flushNativeCommandDiagnostics(attemptDiagnostics);
+      } catch {
+        /* Observability cannot replace an attempt's processing outcome. */
+      }
+    }
     if (lease) await lease.release();
     context.vars.active = false;
     context.vars.controller = null;
@@ -789,6 +815,17 @@ export const scrubVideo = actor({
       ),
     getStatus: (context: VideoContext): Promise<VideoJobStatus | null> =>
       videoStatus(context),
+    getDiagnostics: (
+      context: VideoContext,
+      proof: unknown,
+      limit?: number
+    ): Promise<RivetDiagnosticPage> =>
+      readRivetDiagnostics(
+        context,
+        proof,
+        limit,
+        nativeOptions.diagnostics?.redactValues
+      ),
     getResult: async (context: VideoContext): Promise<VideoResult | null> =>
       (await new SqliteRunRepository(context.db).get())?.result ?? null,
     cancel: (context: VideoContext): Promise<VideoJobStatus> =>

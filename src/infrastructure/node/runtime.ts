@@ -1,6 +1,8 @@
 import type { runCommand } from "../../utils/helpers.js";
 import type OpenAI from "openai";
 import type { DeepgramClient } from "@deepgram/sdk";
+import type { NativeDiagnosticsOptions } from "./diagnostics.js";
+export type { NativeDiagnosticsOptions } from "./diagnostics.js";
 
 export interface NativeLogger {
   debug(message: string): void;
@@ -29,6 +31,7 @@ export interface NativeRuntimeOptions {
   providers?: string[];
   logger?: NativeLogger;
   runCommand?: typeof runCommand;
+  diagnostics?: NativeDiagnosticsOptions;
 }
 
 export interface NativeOperationOptions {
@@ -40,4 +43,5 @@ export interface NativeOperationOptions {
   maxDurationSeconds?: number;
   maxSourceBytes?: number;
   maxArtifactBytes?: number;
+  diagnosticContext?: { runId: string; attemptId: string };
 }

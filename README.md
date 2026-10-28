@@ -805,6 +805,29 @@ npm run job:rivet -- cancel <returned-job-id>
 ```
 
 `retry <job-id>` resumes failed/cancelled work with a renewed attempt budget.
+
+Download failures emit a bounded JSON diagnostic containing the video ID,
+operation (`metadata`, `audio`, or `video`), exit status or signal when available,
+elapsed time, attempt identity, and up to 8 KiB of redacted stderr. CLI and server
+deployments use the same native adapter; the core pipeline does not read logging
+configuration or persist raw exception causes in public results.
+
+Rivet also keeps a bounded diagnostic journal in each video actor: at most 20
+events and 256 KiB. Read the latest events with the server-side operator command:
+
+```bash
+npm run diagnostics:rivet -- <job-id> <video-id>
+```
+
+An optional final argument selects one to five events. Reads require a short-lived
+actor-bound proof created from the protected Rivet admin token; public job errors
+stay generic. Credentials, authentication headers, cookies, and URL credentials
+are redacted before logs or diagnostic records are written. Logging failures do
+not change a download result or consume pipeline retry budgets.
+
+To retry an existing request, use `npm run job:rivet -- retry <job-id>`.
+Only failed or cancelled videos restart; completed videos keep their saved
+artifacts, inference checkpoints, and model usage.
 This helper uses the Rivet SDK through the engine endpoint. To exercise a live
 video in the deployment smoke check, set `RIVET_VERIFY_VIDEO_URL` when running
 `npm run verify:rivet`.

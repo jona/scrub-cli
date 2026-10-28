@@ -19,6 +19,8 @@ import { resolveLocalInference } from "./inference.js";
 import type { CliInferenceOptions } from "../../entrypoints/cli/dependencies.js";
 import { resolveLangSmithTracingConfig } from "../tracing-config.js";
 import { LangSmithModelTracing } from "../../infrastructure/observability/LangSmithModelTracing.js";
+import { createNativeDiagnostics } from "../native-diagnostics.js";
+import { flushNativeCommandDiagnostics } from "../../infrastructure/node/diagnostics.js";
 
 const modelEnvironment = () => ({
   ...process.env,
@@ -35,7 +37,17 @@ const models = createDeploymentModelGateway(
   undefined,
   tracing
 );
-const stages = createCliStages();
+const nativeDiagnostics = createNativeDiagnostics(
+  () => process.env,
+  () =>
+    ["openai", "anthropic", "deepgram"].flatMap((provider) => {
+      const key = config.getApiKey(
+        provider as "openai" | "anthropic" | "deepgram"
+      );
+      return key ? [key] : [];
+    })
+);
+const stages = createCliStages({ nativeDiagnostics });
 const modelDefaults = (overrides: CliInferenceOptions) => {
   const env: Record<string, string | undefined> = modelEnvironment();
   const current = resolveDeploymentModelConfig(env).defaults;
@@ -67,6 +79,7 @@ try {
         resolveLocalInference(
           {
             ...options,
+            nativeDiagnostics,
             skipVisuals:
               extname(file).toLowerCase() === ".mp3" || options?.skipVisuals,
           },
@@ -79,7 +92,7 @@ try {
       processYouTubePlaylist(
         url,
         resolveLocalInference(
-          options ?? {},
+          { ...options, nativeDiagnostics },
           modelDefaults,
           models,
           config.getOutput().includeFullTranscript
@@ -100,5 +113,8 @@ try {
       }),
   });
 } finally {
-  await tracing.flush();
+  await Promise.allSettled([
+    tracing.flush(),
+    flushNativeCommandDiagnostics(nativeDiagnostics),
+  ]);
 }

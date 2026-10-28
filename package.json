@@ -35,6 +35,7 @@
     "verify:rivet:concurrency": "node --env-file=.env.rivet.local scripts/rivet/verify-concurrency.mjs",
     "verify:rivet:full": "node --env-file=.env.rivet.local scripts/rivet/verify-full.mjs",
     "credentials:rivet": "node --env-file=.env.rivet.local scripts/rivet/credentials.mjs",
+    "diagnostics:rivet": "node --env-file=.env.rivet.local scripts/rivet/diagnostics.mjs",
     "job:rivet": "node --env-file=.env.rivet.local scripts/rivet/job.mjs",
     "typecheck:portable": "tsc -p tsconfig.portable.json --noEmit",
     "start:api": "node dist/deployments/local/api.js",

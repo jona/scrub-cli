@@ -2,11 +2,38 @@ import { spawn } from "child_process";
 import { StringDecoder } from "node:string_decoder";
 import { PipelineError } from "../core/errors.js";
 
+export interface CommandFailureDiagnostics {
+  code?: number;
+  signal?: string;
+  stderr: string;
+  stderrTruncated: boolean;
+}
+
+// Raw process output stays private to adapters that deliberately sanitize it.
+// Errors retain their original identity, enumerable properties and wire format.
+const commandFailures = new WeakMap<
+  object,
+  Readonly<CommandFailureDiagnostics>
+>();
+
+export function getCommandFailureDiagnostics(
+  error: unknown
+): Readonly<CommandFailureDiagnostics> | undefined {
+  if (
+    (typeof error !== "object" || error === null) &&
+    typeof error !== "function"
+  )
+    return undefined;
+  const details = commandFailures.get(error);
+  return details ? Object.freeze({ ...details }) : undefined;
+}
+
 /** Bounded byte retention; callbacks receive complete, incrementally decoded text. */
 class CommandOutput {
   private bytes: Buffer = Buffer.alloc(0);
   private start = 0;
   private size = 0;
+  private truncated = false;
   private readonly decoder = new StringDecoder("utf8");
 
   constructor(
@@ -22,6 +49,8 @@ class CommandOutput {
         "resource_limit",
         "Native stdout exceeds the configured limit"
       );
+    if (this.mode === "tail" && this.size + data.byteLength > this.maximum)
+      this.truncated = true;
     const required = Math.min(this.maximum, this.size + data.byteLength);
     if (required > this.bytes.byteLength) {
       const capacity = Math.min(
@@ -57,6 +86,31 @@ class CommandOutput {
     const first = Math.min(this.size, this.bytes.byteLength - this.start);
     this.bytes.copy(target, 0, this.start, this.start + first);
     this.bytes.copy(target, first, 0, this.size - first);
+  }
+
+  /** A failure snapshot must not finalize the decoder or call an output sink. */
+  snapshot(): Pick<CommandFailureDiagnostics, "stderr" | "stderrTruncated"> {
+    const retained = Buffer.allocUnsafe(this.size);
+    this.copyInto(retained);
+    // Invalid tool bytes can expand when decoded. Bound the UTF-8 projection as
+    // well as the original byte ring, and begin at a complete code point.
+    let retainedStart = 0;
+    while (
+      retainedStart < retained.byteLength &&
+      (retained[retainedStart] & 0xc0) === 0x80
+    )
+      retainedStart++;
+    const encoded = Buffer.from(
+      retained.subarray(retainedStart).toString("utf8")
+    );
+    let start = Math.max(0, encoded.byteLength - this.maximum);
+    const truncated = this.truncated || start > 0;
+    while (start < encoded.byteLength && (encoded[start] & 0xc0) === 0x80)
+      start++;
+    return {
+      stderr: encoded.subarray(start).toString("utf8"),
+      stderrTruncated: truncated,
+    };
   }
 
   finish(): string {
@@ -149,6 +203,29 @@ export function runCommand(
       shell: false,
       detached: process.platform !== "win32",
     });
+    const rememberFailure = (
+      error: unknown,
+      code?: number | null,
+      signal?: string | null
+    ) => {
+      if (
+        (typeof error !== "object" || error === null) &&
+        typeof error !== "function"
+      )
+        return;
+      try {
+        commandFailures.set(
+          error,
+          Object.freeze({
+            ...(Number.isSafeInteger(code) ? { code: code as number } : {}),
+            ...(signal ? { signal } : {}),
+            ...stderr.snapshot(),
+          })
+        );
+      } catch {
+        /* Diagnostic retention must not replace the process outcome. */
+      }
+    };
     let failure: Error | undefined;
     let forceKill: ReturnType<typeof setTimeout> | undefined;
     const kill = (signal: NodeJS.Signals) => {
@@ -205,18 +282,21 @@ export function runCommand(
 
     proc.on("close", (code, signal) => {
       cleanup();
-      if (failure) reject(failure);
-      else if (signal || code === null)
-        reject(
-          new PipelineError(
-            "processing_failed",
-            "Native process terminated before completing"
-          )
+      if (failure) {
+        rememberFailure(failure, code, signal);
+        reject(failure);
+      } else if (signal || code === null) {
+        const error = new PipelineError(
+          "processing_failed",
+          "Native process terminated before completing"
         );
-      else {
+        rememberFailure(error, code, signal);
+        reject(error);
+      } else {
         try {
           resolve({ code, stdout: stdout.finish(), stderr: stderr.finish() });
         } catch (error) {
+          rememberFailure(error, code, signal);
           reject(error);
         }
       }
@@ -224,6 +304,7 @@ export function runCommand(
 
     proc.on("error", (err) => {
       cleanup();
+      rememberFailure(err);
       reject(err);
     });
     proc.stdin.on("error", () => {

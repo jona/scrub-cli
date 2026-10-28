@@ -40,6 +40,7 @@ export class NodeMediaProcessor implements MediaProcessor {
       maxDurationSeconds: settings.limits.maxDurationSeconds,
       maxSourceBytes: settings.limits.maxSourceBytes,
       maxArtifactBytes: settings.limits.maxArtifactBytes,
+      diagnosticContext: { runId: context.runId, attemptId: context.attemptId },
     };
   }
   async acquire(

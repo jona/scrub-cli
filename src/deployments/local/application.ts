@@ -8,6 +8,8 @@ import {
 import { resolveRuntimeConcurrency } from "../../infrastructure/runtime/config.js";
 import { resolveLangSmithTracingConfig } from "../tracing-config.js";
 import { LangSmithModelTracing } from "../../infrastructure/observability/LangSmithModelTracing.js";
+import { createNativeDiagnostics } from "../native-diagnostics.js";
+import { flushNativeCommandDiagnostics } from "../../infrastructure/node/diagnostics.js";
 
 /** Explicit server composition; imports neither start listeners nor read CLI/HOME configuration. */
 export function createLocalApplicationFromEnvironment(
@@ -19,6 +21,7 @@ export function createLocalApplicationFromEnvironment(
   const tracing = new LangSmithModelTracing(() =>
     resolveLangSmithTracingConfig(env)
   );
+  const nativeDiagnostics = createNativeDiagnostics(() => env);
   const runtime = new LocalJobRuntime({
     dataRoot: resolve(env.SCRUB_DATA_DIR ?? ".local/runtime"),
     native: {
@@ -34,6 +37,7 @@ export function createLocalApplicationFromEnvironment(
       ).split(","),
       openaiApiKey: env.OPENAI_API_KEY,
       deepgramApiKey: env.DEEPGRAM_API_KEY,
+      diagnostics: nativeDiagnostics,
     },
     models: createDeploymentModelGateway(() => env, undefined, tracing),
     inferenceDefaults: resolveDeploymentModelConfig(env).defaults,
@@ -52,7 +56,10 @@ export function createLocalApplicationFromEnvironment(
         try {
           await runtime.close();
         } finally {
-          await tracing.flush();
+          await Promise.allSettled([
+            tracing.flush(),
+            flushNativeCommandDiagnostics(nativeDiagnostics),
+          ]);
         }
       })()),
   };
