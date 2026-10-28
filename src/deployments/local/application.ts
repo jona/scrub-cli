@@ -39,7 +39,7 @@ export function createLocalApplicationFromEnvironment(
       deepgramApiKey: env.DEEPGRAM_API_KEY,
       diagnostics: nativeDiagnostics,
     },
-    models: createDeploymentModelGateway(() => env, undefined, tracing),
+    models: createDeploymentModelGateway(() => env, tracing),
     inferenceDefaults: resolveDeploymentModelConfig(env).defaults,
     resourceCeilings,
     requestDefault: concurrency.requestDefault,

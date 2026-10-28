@@ -4,7 +4,7 @@ import {
   createNodeHttpServer,
   parsePort,
 } from "../../src/infrastructure/node/http/server.js";
-import { createMetricsServer } from "../../src/infrastructure/node/http/metrics.js";
+import { createBearerAuthorizer } from "../../src/infrastructure/node/http/auth.js";
 import { createApiHandler } from "../../src/entrypoints/api/handler.js";
 
 const createApiServer = () => createNodeHttpServer(createApiHandler());
@@ -44,26 +44,17 @@ afterEach(async () => {
 });
 
 describe("public API server", () => {
-  it("imports and creates servers without a provider or listener", async () => {
+  it("imports and creates a server without opening a listener", async () => {
     vi.resetModules();
-    vi.doMock("rivetkit", () => {
-      throw new Error("The API must not load a deployment provider");
-    });
     const listenSpy = vi.spyOn(Server.prototype, "listen");
     try {
       const api = await import("../../src/infrastructure/node/http/server.js");
-      const metrics =
-        await import("../../src/infrastructure/node/http/metrics.js");
       expect(api.createNodeHttpServer(createApiHandler()).listening).toBe(
         false
       );
-      expect(
-        metrics.createMetricsServer(async () => new Response("")).listening
-      ).toBe(false);
       expect(listenSpy).not.toHaveBeenCalled();
     } finally {
       listenSpy.mockRestore();
-      vi.doUnmock("rivetkit");
       vi.resetModules();
     }
   });
@@ -86,16 +77,41 @@ describe("public API server", () => {
     }
   );
 
-  it.each(["/metrics", "/actors", "/unknown"])(
-    "does not expose %s on the public listener",
-    async (path) => {
-      const url = await listen(createApiServer());
-      const response = await fetch(`${url}${path}`);
+  it("returns 404 for an unknown route", async () => {
+    const url = await listen(createApiServer());
+    const response = await fetch(`${url}/internal`);
 
-      expect(response.status).toBe(404);
-      expect(await response.json()).toEqual({ error: "Not found" });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "Not found" });
+  });
+
+  it("requires the configured bearer token for job routes while keeping health public", async () => {
+    const url = await listen(
+      createNodeHttpServer(
+        createApiHandler({
+          authorize: createBearerAuthorizer("test-only-api-token"),
+        })
+      )
+    );
+    expect((await fetch(`${url}/healthz`)).status).toBe(200);
+    for (const authorization of [undefined, "Bearer wrong-token"]) {
+      const response = await fetch(`${url}/jobs`, {
+        headers: authorization ? { authorization } : {},
+      });
+      expect(response.status).toBe(401);
+      expect(response.headers.get("www-authenticate")).toBe("Bearer");
+      expect(await response.json()).toMatchObject({
+        error: { code: "unauthorized" },
+      });
     }
-  );
+    const authenticated = await fetch(`${url}/jobs`, {
+      headers: { authorization: "Bearer test-only-api-token" },
+    });
+    expect(authenticated.status).toBe(503);
+    expect(await authenticated.json()).toMatchObject({
+      error: { code: "unavailable" },
+    });
+  });
 
   it("rejects writes to the health endpoint", async () => {
     const url = await listen(createApiServer());
@@ -107,59 +123,6 @@ describe("public API server", () => {
     expect(response.status).toBe(405);
     expect(response.headers.get("allow")).toBe("GET");
     expect(await response.json()).toEqual({ error: "Method not allowed" });
-  });
-});
-
-describe("separate metrics server", () => {
-  it("serves the supplied response on the separate listener", async () => {
-    const metrics = vi.fn(
-      async () =>
-        new Response("scrub_actions_total 2\n", {
-          headers: { "Content-Type": "text/plain; version=0.0.4" },
-        })
-    );
-    const url = await listen(createMetricsServer(metrics));
-    const response = await fetch(`${url}/metrics`);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toBe(
-      "text/plain; version=0.0.4"
-    );
-    expect(await response.text()).toBe("scrub_actions_total 2\n");
-    expect(metrics).toHaveBeenCalledOnce();
-  });
-
-  it("forwards a metrics callback failure status", async () => {
-    const url = await listen(
-      createMetricsServer(async () => new Response("warming", { status: 503 }))
-    );
-    const response = await fetch(`${url}/metrics`);
-
-    expect(response.status).toBe(503);
-    expect(await response.text()).toBe("warming");
-  });
-
-  it("hides internal errors when metrics collection throws", async () => {
-    const url = await listen(
-      createMetricsServer(async () => {
-        throw new Error("internal configuration details");
-      })
-    );
-    const response = await fetch(`${url}/metrics`);
-
-    expect(response.status).toBe(503);
-    expect(await response.text()).toBe("Metrics unavailable\n");
-  });
-
-  it("does not invoke metrics for other routes or methods", async () => {
-    const metrics = vi.fn(async () => new Response("metrics"));
-    const url = await listen(createMetricsServer(metrics));
-
-    expect((await fetch(`${url}/`)).status).toBe(404);
-    expect((await fetch(`${url}/metrics`, { method: "POST" })).status).toBe(
-      404
-    );
-    expect(metrics).not.toHaveBeenCalled();
   });
 });
 

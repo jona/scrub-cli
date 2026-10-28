@@ -4,7 +4,6 @@ import {
   type InferenceSettingsInput,
   type StructuredModelGateway,
 } from "../application/model.js";
-import type { OperationContext } from "../application/contracts.js";
 import type { LangSmithModelTracing } from "../infrastructure/observability/LangSmithModelTracing.js";
 import {
   ProviderModelGateway,
@@ -120,14 +119,9 @@ export function resolveDeploymentModelConfig(
   return { defaults, providers };
 }
 
-/**
- * Refresh from a server-owned credential cache without persisting keys in jobs.
- * The loader keeps supports() network-free. Composition refreshes the cache
- * before preflight and the optional hook refreshes it before each model call.
- */
+/** Resolve server-owned environment credentials lazily without persisting them in jobs. */
 export function createDeploymentModelGateway(
   loadEnvironment: () => Record<string, string | undefined>,
-  refresh?: (context: OperationContext) => Promise<void>,
   tracing?: Pick<LangSmithModelTracing, "wrap">
 ): StructuredModelGateway {
   let previous = "";
@@ -145,8 +139,6 @@ export function createDeploymentModelGateway(
   return {
     supports: (selection) => current().supports(selection),
     generate: async (request, context) => {
-      context.signal.throwIfAborted();
-      await refresh?.(context);
       context.signal.throwIfAborted();
       const provider = current();
       return (tracing?.wrap(provider) ?? provider).generate(request, context);

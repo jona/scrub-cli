@@ -89,11 +89,11 @@ describe("deployment-owned native diagnostics", () => {
 
   it("redacts both environment and credential-store/config keys before the log sink", async () => {
     const environment = {
-      RIVET_TOKEN: "SERVER_ENV_CREDENTIAL_SENTINEL",
+      SERVER_DIAGNOSTICS_TOKEN: "SERVER_ENV_CREDENTIAL_SENTINEL",
       SCRUB_API_TOKEN: "PUBLIC_API_CREDENTIAL_SENTINEL",
       YTDLP_COOKIE: "COOKIE_CREDENTIAL_SENTINEL",
     };
-    const configuredKey = "CONFIG_OR_ACTOR_CREDENTIAL_SENTINEL";
+    const configuredKey = "CONFIG_CREDENTIAL_SENTINEL";
     const write = vi.fn();
     const diagnostics = createNativeDiagnostics(
       () => environment,

@@ -81,10 +81,16 @@ describe("inference settings boundaries", () => {
 });
 
 describe("deployment model registry", () => {
-  it("wraps the refreshed provider capability only for generation, keeping preflight network-free", async () => {
+  it("loads environment credentials lazily and wraps only generation, keeping preflight network-free", async () => {
     let key: string | undefined;
     const order: string[] = [];
     const selection = { provider: "openai", model: "gpt-6.1-sol" };
+    const loadEnvironment = vi.fn(() => ({ OPENAI_API_KEY: key }));
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(
+        new Error("Preflight must not make a network request")
+      );
     const tracing = {
       wrap: vi.fn((delegate: StructuredModelGateway) => {
         order.push("wrap");
@@ -98,70 +104,81 @@ describe("deployment model registry", () => {
         };
       }),
     };
-    const gateway = createDeploymentModelGateway(
-      () => ({ OPENAI_API_KEY: key }),
-      async () => {
-        order.push("refresh");
-        key = "fresh-server-provider-secret";
-      },
-      tracing
-    );
-    expect(gateway.supports(selection)).toBe(false);
-    expect(tracing.wrap).not.toHaveBeenCalled();
-    expect(
-      await gateway.generate(
-        {
-          selection,
-          system: "system",
-          prompt: "prompt",
-          schema: {},
-          schemaName: "fixture",
-          maxOutputTokens: 512,
-        },
-        {
-          runId: "run",
-          attemptId: "attempt",
-          signal: new AbortController().signal,
-          now: Date.now,
-          emit: () => {},
-        }
-      )
-    ).toMatchObject({ value: { complete: true } });
-    expect(order).toEqual(["refresh", "wrap", "generate"]);
+    try {
+      const gateway = createDeploymentModelGateway(loadEnvironment, tracing);
+      expect(loadEnvironment).not.toHaveBeenCalled();
+      expect(gateway.supports(selection)).toBe(false);
+      key = "test-only-provider-key";
+      expect(gateway.supports(selection)).toBe(true);
+      expect(tracing.wrap).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(
+        await gateway.generate(
+          {
+            selection,
+            system: "system",
+            prompt: "prompt",
+            schema: {},
+            schemaName: "fixture",
+            maxOutputTokens: 512,
+          },
+          {
+            runId: "run",
+            attemptId: "attempt",
+            signal: new AbortController().signal,
+            now: Date.now,
+            emit: () => {},
+          }
+        )
+      ).toMatchObject({ value: { complete: true } });
+      expect(order).toEqual(["wrap", "generate"]);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+    }
   });
 
-  it("does not start tracing or generation after credential refresh cancels the operation", async () => {
+  it("honors cancellation before loading credentials, tracing, or network work", async () => {
     const controller = new AbortController();
+    const loadEnvironment = vi.fn(() => ({
+      OPENAI_API_KEY: "test-only-provider-key",
+    }));
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(
+        new Error("Cancelled generation must not make a network request")
+      );
     const tracing = {
       wrap: vi.fn((delegate: StructuredModelGateway) => delegate),
     };
-    const gateway = createDeploymentModelGateway(
-      () => ({}),
-      async () => {
-        controller.abort();
-      },
-      tracing
-    );
-    await expect(
-      gateway.generate(
-        {
-          selection: { provider: "openai", model: "gpt-6.1-sol" },
-          system: "",
-          prompt: "",
-          schema: {},
-          schemaName: "fixture",
-          maxOutputTokens: 512,
-        },
-        {
-          runId: "run",
-          attemptId: "attempt",
-          signal: controller.signal,
-          now: Date.now,
-          emit: () => {},
-        }
-      )
-    ).rejects.toThrow();
-    expect(tracing.wrap).not.toHaveBeenCalled();
+    const gateway = createDeploymentModelGateway(loadEnvironment, tracing);
+    controller.abort(new Error("Generation cancelled before starting"));
+    try {
+      await expect(
+        gateway.generate(
+          {
+            selection: { provider: "openai", model: "gpt-6.1-sol" },
+            system: "",
+            prompt: "",
+            schema: {},
+            schemaName: "fixture",
+            maxOutputTokens: 512,
+          },
+          {
+            runId: "run",
+            attemptId: "attempt",
+            signal: controller.signal,
+            now: Date.now,
+            emit: () => {},
+          }
+        )
+      ).rejects.toThrow("Generation cancelled before starting");
+      expect(loadEnvironment).not.toHaveBeenCalled();
+      expect(tracing.wrap).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+    }
   });
 
   it("defaults full processing to OpenAI and keeps credentials out of persisted defaults", () => {
@@ -332,58 +349,83 @@ describe("deployment model registry", () => {
       vision: { provider: "openai", model: "gpt-6-luna" },
     });
   });
-  it("loads credentials lazily and refreshes before each generation while honoring abort", async () => {
-    let key: string | undefined;
-    let refreshes = 0;
-    const controller = new AbortController();
-    const gateway = createDeploymentModelGateway(
-      () => ({ OPENAI_API_KEY: key }),
-      async () => {
-        refreshes++;
-        controller.abort();
-      }
-    );
+  it("uses a rotated environment credential for the next actual model request", async () => {
+    let key = "test-only-first-provider-key";
+    const gateway = createDeploymentModelGateway(() => ({
+      OPENAI_API_KEY: key,
+    }));
     const selection = { provider: "openai", model: "gpt-6.1-sol" };
-    expect(gateway.supports(selection)).toBe(false);
-    key = "test-only-provider-key";
-    expect(gateway.supports(selection)).toBe(true);
-    expect(gateway.supports({ ...selection, model: "unregistered" })).toBe(
-      false
-    );
     const context: OperationContext = {
       runId: "test",
       attemptId: "1",
-      signal: controller.signal,
+      signal: new AbortController().signal,
       now: Date.now,
       emit: () => undefined,
     };
-    await expect(
-      gateway.generate(
-        {
-          selection,
-          system: "system",
-          prompt: "prompt",
-          schema: {},
-          schemaName: "test",
-          maxOutputTokens: 512,
-        },
-        context
-      )
-    ).rejects.toThrow();
-    expect(refreshes).toBe(1);
+    const authorization: Array<string | null> = [];
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const headers = new Headers(
+          input instanceof Request ? input.headers : undefined
+        );
+        new Headers(init?.headers).forEach((value, name) =>
+          headers.set(name, value)
+        );
+        authorization.push(headers.get("authorization"));
+        return new Response(
+          JSON.stringify({
+            choices: [
+              { message: { content: '{"ok":true}' }, finish_reason: "stop" },
+            ],
+          }),
+          { headers: { "content-type": "application/json" } }
+        );
+      });
+    const request = {
+      selection,
+      system: "system",
+      prompt: "prompt",
+      schema: { type: "object" },
+      schemaName: "test",
+      maxOutputTokens: 512,
+    };
+    try {
+      expect(gateway.supports(selection)).toBe(true);
+      expect(gateway.supports({ ...selection, model: "unregistered" })).toBe(
+        false
+      );
+      expect(fetch).not.toHaveBeenCalled();
+      expect(await gateway.generate(request, context)).toMatchObject({
+        value: { ok: true },
+      });
+      key = "test-only-rotated-provider-key";
+      expect(await gateway.generate(request, context)).toMatchObject({
+        value: { ok: true },
+      });
+      expect(authorization).toEqual([
+        "Bearer test-only-first-provider-key",
+        "Bearer test-only-rotated-provider-key",
+      ]);
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      fetch.mockRestore();
+    }
   });
   it("drops a removed credential before the next model call instead of using its cached client", async () => {
     let key: string | undefined = "test-only-provider-key";
     const selection = { provider: "openai", model: "gpt-6.1-terra" };
-    const gateway = createDeploymentModelGateway(
-      () => ({ OPENAI_API_KEY: key }),
-      async () => {
-        key = undefined;
-      }
-    );
-    expect(gateway.supports(selection)).toBe(true);
-    const fetch = vi.spyOn(globalThis, "fetch");
+    const gateway = createDeploymentModelGateway(() => ({
+      OPENAI_API_KEY: key,
+    }));
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(
+        new Error("An unconfigured model must not make a network request")
+      );
     try {
+      expect(gateway.supports(selection)).toBe(true);
+      key = undefined;
       await expect(
         gateway.generate(
           {

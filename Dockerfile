@@ -1,11 +1,8 @@
 ARG NODE_IMAGE=node:22-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf
 FROM ${NODE_IMAGE} AS build
 WORKDIR /app
-ARG SCRUB_DEPENDENCY_HOOK
 COPY package.json package-lock.json ./
-RUN --mount=type=bind,source=deployments,target=/tmp/scrub-deployment,readonly \
-    npm ci --no-audit --no-fund \
-    && if [ -n "$SCRUB_DEPENDENCY_HOOK" ]; then sh "/tmp/scrub-deployment/$SCRUB_DEPENDENCY_HOOK"; fi
+RUN npm ci --no-audit --no-fund
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
@@ -36,10 +33,7 @@ RUN python3 -m venv /opt/venv \
     && printf '%s\n' '--js-runtimes node' > /etc/yt-dlp.conf \
     && rm /tmp/scrub-requirements.txt
 COPY package.json package-lock.json ./
-ARG SCRUB_DEPENDENCY_HOOK
-RUN --mount=type=bind,source=deployments,target=/tmp/scrub-deployment,readonly \
-    npm ci --omit=dev --no-audit --no-fund \
-    && if [ -n "$SCRUB_DEPENDENCY_HOOK" ]; then sh "/tmp/scrub-deployment/$SCRUB_DEPENDENCY_HOOK"; fi \
+RUN npm ci --omit=dev --no-audit --no-fund \
     && npm cache clean --force \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn* \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg

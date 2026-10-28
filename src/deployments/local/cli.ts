@@ -32,11 +32,7 @@ resolveLangSmithTracingConfig(modelEnvironment());
 const tracing = new LangSmithModelTracing(() =>
   resolveLangSmithTracingConfig(modelEnvironment())
 );
-const models = createDeploymentModelGateway(
-  modelEnvironment,
-  undefined,
-  tracing
-);
+const models = createDeploymentModelGateway(modelEnvironment, tracing);
 const nativeDiagnostics = createNativeDiagnostics(
   () => process.env,
   () =>

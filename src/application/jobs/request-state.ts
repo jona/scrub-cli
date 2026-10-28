@@ -47,7 +47,6 @@ export function memberWithStatus(
       status: status.status,
       stage: status.stage,
       progress: status.progress,
-      ...(status.actorId ? { actorId: status.actorId } : {}),
       ...(status.failure ? { failure: status.failure } : {}),
     },
   };

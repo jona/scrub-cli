@@ -323,7 +323,7 @@ describe("Scrub MCP application interface", () => {
         status: "completed",
         stage: "completed",
         progress: 100,
-        actorId: "private-runtime-actor-id",
+        runtimeHandle: "private-runtime-handle",
         result: {
           mode: "full",
           metadata: {
@@ -392,7 +392,7 @@ describe("Scrub MCP application interface", () => {
       { timestamp: 1, artifact: artifact("frame") },
     ]);
     expect(JSON.stringify(output)).not.toMatch(
-      /private-runtime-actor-id|private-runtime-cache-key/
+      /private-runtime-handle|private-runtime-cache-key/
     );
   });
 

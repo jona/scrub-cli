@@ -19,9 +19,9 @@ import {
 function modelResponse() {
   return {
     tldr: "Actors keep document state.",
-    overview: "A short introduction to actors.",
+    overview: "A short introduction to durable jobs.",
     thesisAndClaims: {
-      thesis: "Use actors",
+      thesis: "Use durable jobs",
       keyClaims: [{ claim: "State persists" }],
     },
     actionableInsights: [],
@@ -58,7 +58,7 @@ describe("Prompt artifacts", () => {
   it("generates the existing prompt and output schema from in-memory content", () => {
     const artifact = createPromptArtifact({
       metadata: { title: "Actor notes", source: "Workshop", duration: 61 },
-      content: "[0:00] An actor stores each document.",
+      content: "[0:00] A job record stores each document.",
       visuals: [
         { timestamp: 30, description: "Actor diagram", visualType: "diagram" },
       ],
@@ -75,7 +75,9 @@ describe("Prompt artifacts", () => {
       url: "",
     });
     expect(artifact.prompt).toContain("- Duration: 1:01");
-    expect(artifact.prompt).toContain("[0:00] An actor stores each document.");
+    expect(artifact.prompt).toContain(
+      "[0:00] A job record stores each document."
+    );
     expect(artifact.prompt).toContain("[0:30] (diagram)");
     expect(artifact.schema.required).toContain("sections");
   });

@@ -45,14 +45,3 @@ target "local-mcp" {
     SCRUB_ENTRYPOINT = "dist/deployments/local/mcp.js"
   }
 }
-
-# The Rivet host serves both HTTP job routes and Streamable HTTP MCP.
-target "rivet-api" {
-  inherits = ["_native"]
-  tags = ["scrub:rivet-api-${TAG}"]
-  platforms = ["linux/amd64"]
-  args = {
-    SCRUB_ENTRYPOINT = "dist/deployments/rivet/main.js"
-    SCRUB_DEPENDENCY_HOOK = "rivet/prune-dependencies.sh"
-  }
-}

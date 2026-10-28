@@ -44,8 +44,6 @@ export interface VideoJobStatus {
   stage: string;
   progress: number;
   attempts: number;
-  /** Optional legacy runtime metadata; portable services never require it. */
-  actorId?: string;
   failure?: Failure;
 }
 export type WakeReason = "immediate" | "retry" | "recovery" | "stop";

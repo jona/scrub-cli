@@ -72,12 +72,6 @@ function sourceFiles(directory: string): string[] {
 const sourcePath = (file: string) =>
   relative(sourceRoot, file).split(sep).join("/");
 const inLayer = (file: string, layer: string) => file.startsWith(`${layer}/`);
-const isRivetSdk = (name: string) =>
-  name === "rivetkit" ||
-  name.startsWith("rivetkit/") ||
-  name.startsWith("@rivetkit/") ||
-  name.startsWith("@rivet-dev/");
-
 const nodeModules = new Set(
   builtinModules.map((name) => name.replace(/^node:/, ""))
 );
@@ -248,16 +242,6 @@ describe("architecture boundaries", () => {
           violations.push(
             `${from} imports nonportable dependency ${specifier}`
           );
-        const sdk =
-          isRivetSdk(specifier) ||
-          (imported?.packageId && isRivetSdk(imported.packageId.name));
-        if (
-          sdk &&
-          !inLayer(from, "infrastructure/rivet") &&
-          !inLayer(from, "deployments/rivet")
-        ) {
-          violations.push(`${from} imports Rivet SDK ${specifier}`);
-        }
         if (!imported) {
           if (specifier.startsWith(".") || specifier.startsWith("/")) {
             violations.push(`${from} has unresolved local import ${specifier}`);
@@ -276,22 +260,12 @@ describe("architecture boundaries", () => {
     }
 
     for (const from of graph.keys()) {
-      const business = ["core", "services", "orchestrators"].some((layer) =>
-        inLayer(from, layer)
-      );
       const portable =
         inLayer(from, "core") ||
         inLayer(from, "application") ||
         from === "index.ts";
       const entrypoint = inLayer(from, "entrypoints");
-      const provider = inLayer(from, "infrastructure/rivet");
-      const forbidden = [
-        ...(business || entrypoint
-          ? ["infrastructure/rivet", "deployments"]
-          : []),
-        ...(business || provider ? ["entrypoints"] : []),
-        ...(provider ? ["deployments"] : []),
-      ];
+      const forbidden = entrypoint ? ["deployments"] : [];
       // Follow barrels too: moving a forbidden import to a helper cannot hide it.
       const pending = (graph.get(from) ?? []).map((target) => [from, target]);
       const visited = new Set<string>([from]);

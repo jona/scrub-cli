@@ -9,7 +9,7 @@ produce validated analysis, a structured summary, and Markdown. The default loca
 CLI stops after preprocessing so an agent harness can use its own models.
 
 Use the same processing stages from the local CLI or through persistent background
-jobs on a standalone Node host or Rivet. Submit a video or playlist, disconnect,
+jobs on a Node host. Submit a video or playlist, disconnect,
 and poll for progress and artifacts later. HTTP, MCP, and server-side library
 integrations provide job access; a browser dashboard is not included.
 
@@ -50,7 +50,7 @@ pip install faster-whisper
 
 Run `scrub doctor` to inspect tools/settings, or `scrub transcribers` to inspect
 adapters. Local Whisper can be configured with an executable path and model
-directory. The Rivet image supplies its own tools and base model.
+directory. The container image supplies its own tools and base model.
 Before YouTube processing or retries, check the latest stable yt-dlp release and
 upgrade the executable Scrub uses. For pip installations, use
 `python3 -m pip install --upgrade 'yt-dlp[default]'` in its owning environment.
@@ -148,7 +148,7 @@ by these commands.
 
 ### Model configuration
 
-The local and Rivet compositions use the same provider registry. The shipped
+The CLI, API, and MCP compositions use the same provider registry. The shipped
 profiles are `openai` using the OpenAI-compatible protocol and `anthropic` using
 Anthropic's protocol. Public selections are persisted with jobs; credentials and
 provider endpoints remain in the server-owned model adapter. Full processing
@@ -217,10 +217,9 @@ selects Anthropic for vision. Provider keys are never build arguments.
 
 ### Optional LangSmith tracing
 
-CLI, standalone API/MCP, and Rivet deployments can trace model calls through the
-same server-side adapter. Tracing is off by default. Enable it with
+CLI and API/MCP hosts can trace model calls through the same server-side adapter. Tracing is off by default. Enable it with
 `LANGSMITH_TRACING=true` and supply `LANGSMITH_API_KEY` through an ignored,
-owner-only env file or the deployment credential store. The key is never a
+owner-only env file or injected server environment. The key is never a
 Docker build argument, job setting, result artifact, or browser configuration.
 
 | Setting                           | Default                           | Purpose                                                                    |
@@ -250,57 +249,32 @@ composition; the shared pipeline and entry points do not import LangSmith or
 read tracing environment variables. Public tracing settings are also Docker
 build arguments; credentials remain server-side.
 
-### Rivet provider credentials
+### Server-side provider credentials
 
-Rivet's documented [credentials actor pattern](https://rivet.dev/agents/docs/user-subscriptions/)
-keeps shared provider keys in a separate authenticated actor. This deployment uses
-that pattern because the v2 pool API currently exposes no environment-secret
-update operation. Public job routes do not expose credential actions.
-
-Use [`.env.example`](.env.example) to set up the ignored `.env.rivet.local`
-server/admin configuration described below. Provider keys use a separate,
-owner-only `.env.models.local` file:
+Keep provider keys in the environment or an ignored, owner-only
+`.env.models.local` file:
 
 ```bash
 touch .env.models.local
 chmod 600 .env.models.local
 ```
 
-Set `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` in that file for the providers you
-intend to use. Add
-`LANGSMITH_API_KEY` when enabling LangSmith tracing.
-
-After the image rollout, the provisioning command loads server/admin settings from
-`.env.rivet.local` and provider keys from `.env.models.local`. It also accepts
-protected standard input and prints provider names only:
+Set `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` for the providers you use. Add
+`LANGSMITH_API_KEY` when enabling tracing. Load the file when starting the CLI or
+server; Node reads its values without putting them in command arguments:
 
 ```bash
-npm run credentials:rivet -- save
-npm run credentials:rivet -- list
-npm run verify:rivet:full
+node --env-file=.env.models.local dist/deployments/local/cli.js file ./recording.mp4 --summarize
+node --env-file=.env.local --env-file=.env.models.local dist/deployments/local/api.js
 ```
 
-Saving again rotates stored keys. `npm run credentials:rivet -- remove anthropic`
-removes a stored key. Keys refresh before each new model call; calls already in
-flight retain their credential. Explicit environment keys take precedence over
-stored keys. `SCRUB_MODEL_CREDENTIAL_SOURCE=environment` disables actor lookup.
-The same provisioning command accepts an optional `LANGSMITH_API_KEY` and stores
-it under the `langsmith` service. `npm run credentials:rivet -- remove langsmith`
-removes it. Runners look up the stored tracing key only when tracing is enabled.
+Use [`.env.example`](.env.example) for the server's public runtime settings and
+required API bearer token. Keys stay out of source control, Docker build
+arguments, image layers, job settings, result artifacts, and browser clients.
+A secret manager can inject the same environment values when hosting the server.
 
-The credential actor requires a short-lived, actor-bound authorization proof.
-The raw Rivet admin token remains in the server/deployment environment; the proof
-is not an encryption scheme. Credential-store administrators and Inspector access
-are trusted with stored keys. Jobs, model prompts, result artifacts, and browser
-clients never receive those keys.
-
-Default inference limits are 48,000 characters per source chunk, a 16,384-token
-starting summary allowance with a 32,768-token recovery ceiling, 2,048 vision
-output tokens, 8 MiB per image, 128 model calls per run, and one repair attempt
-for an invalid structured response. Long transcripts
-are split and reduced rather than silently truncated. Transcript text, frame OCR,
-and metadata are treated as untrusted source material in prompts; model output
-must pass bounded schema validation before publication.
+Transcript text, frame OCR, and metadata are untrusted source material in prompts.
+Model output must pass bounded schema validation before publication.
 
 ## Artifacts and cache
 
@@ -336,25 +310,23 @@ full run; a failed model call or publication does not mark that run completed.
 
 ## Background job API
 
-The standalone Node and Rivet compositions host the same Fetch-standard API.
-`GET /` and `GET /healthz` are public health checks. Job routes require bearer
-authentication with the deployment's `SCRUB_API_TOKEN`. The standalone server
-requires that token at startup; the Rivet composition falls back to `RIVET_TOKEN`
-when a separate app token is absent. Keep these secrets in server-side code or
+The Node server hosts the Fetch-standard API. `GET /` and `GET /healthz` are
+public health checks. Job routes require bearer authentication with
+`SCRUB_API_TOKEN`, which must be configured before startup. Keep it in server-side
 secret configuration, never browser bundles.
 
 ### Standalone server
 
-Create an ignored, owner-only `.env.server.local` file and configure a nonempty
+Create an ignored, owner-only `.env.local` file and configure a nonempty
 `SCRUB_API_TOKEN`. Supply provider keys through the server environment or the
 existing protected `.env.models.local` file. The server does not read CLI settings
 from `~/.scrub/config.json`.
 
 ```bash
-touch .env.server.local
-chmod 600 .env.server.local
+touch .env.local
+chmod 600 .env.local
 npm run build
-node --env-file=.env.server.local dist/deployments/local/api.js
+node --env-file=.env.local dist/deployments/local/api.js
 ```
 
 To load a separate model-key file, add `--env-file=.env.models.local` before the
@@ -374,7 +346,7 @@ starts the same host. Both `/jobs` and `/mcp` use one application instance.
 
 Native executable overrides are `SCRUB_YTDLP_PATH`, `SCRUB_FFMPEG_PATH`,
 `SCRUB_FFPROBE_PATH`, `SCRUB_WHISPER_BINARY_PATH`, and `SCRUB_WHISPER_MODELS_PATH`.
-Model and concurrency settings in this README apply to this host as well as Rivet.
+The model and concurrency settings below also configure this host.
 
 Keep `SCRUB_DATA_DIR` on persistent storage; container deployments should mount a
 volume there. One fenced runtime owns each local data directory. Startup repairs
@@ -412,8 +384,8 @@ Submission shape:
 
 Use `Idempotency-Key` to identify repeated submissions. A key reused with different
 normalized input is rejected. Poll the returned location, then page results using
-`offset += items.length`; the Rivet adapter may return fewer items than requested
-to bound response size. Download the returned artifact references through the
+`offset += items.length`. Advance by the actual number of returned items.
+Download the returned artifact references through the
 artifact route. Authenticated requests receive 503 when the job gateway is not
 configured.
 
@@ -444,14 +416,13 @@ Set `settings.inference.mode` to `preprocess` to stop after prompt/schema assemb
 The local CLI and library keep preprocessing as their default.
 
 Each background request uses the shared request coordinator and video-job services.
-Rivet supplies per-request/per-video actors; the standalone runtime supplies local
-execution and SQLite repositories. Repeated
-videos within that request share work; retries resume valid stage checkpoints.
+The runtime supplies local execution and SQLite repositories. Repeated videos
+within a request share work; retries resume valid stage checkpoints.
 Request scheduling, runner capacity, and an optional global lease cap independently
 bound native work. Request concurrency defaults to one; each runner process allows
 two native operations by default. The global cap is disabled unless configured.
-There is no cross-request shared video cache. Actor-local SQLite stores durable
-run records and chunked artifact bytes; runner scratch files are disposable.
+There is no cross-request shared video cache. SQLite stores durable run records
+and chunked artifact bytes; native-tool scratch files are disposable.
 
 ### Concurrency controls
 
@@ -459,40 +430,30 @@ run records and chunked artifact bytes; runner scratch files are disposable.
 | --------------------------- | -------------------------- | ------------------------------------------------------- |
 | `SCRUB_REQUEST_CONCURRENCY` | `1`                        | Integer 1–16; used when the request omits `concurrency` |
 | `SCRUB_RUNNER_CONCURRENCY`  | `2`                        | Integer 1–64 per runner process                         |
-| `SCRUB_GLOBAL_CONCURRENCY`  | Unset or `none` (disabled) | Integer 1–1024 to enable the cross-runner lease cap     |
+| `SCRUB_GLOBAL_CONCURRENCY`  | Unset or `none` (disabled) | Integer 1–1024 to enable the application-wide lease cap |
 
 An explicit request `concurrency` overrides the request default, while runner and
 optional global limits still apply. Multiple requests share each runner's slots;
-adding a request or actor does not create another dedicated machine. Empty
+adding a request does not create another dedicated machine. Empty
 strings, zero, fractions, and invalid numeric values are rejected at startup.
 The exact value `none` disables the global cap; it is not a numeric zero.
 
-The image build exposes these same non-secret settings as build arguments. Runtime
-environment values override image defaults. This allows a Rivet image rollout to
-change concurrency even when the pool does not expose an environment-update API.
+The image build exposes these non-secret settings as build arguments. Runtime
+environment values override image defaults:
 
 ```bash
-docker buildx bake --file docker-bake.hcl --load rivet-api \
-  --set rivet-api.args.SCRUB_REQUEST_CONCURRENCY=2 \
-  --set rivet-api.args.SCRUB_RUNNER_CONCURRENCY=4 \
-  --set rivet-api.args.SCRUB_GLOBAL_CONCURRENCY=8
+npm run build:image -- --load local-api \
+  --set local-api.args.SCRUB_REQUEST_CONCURRENCY=2 \
+  --set local-api.args.SCRUB_RUNNER_CONCURRENCY=4 \
+  --set local-api.args.SCRUB_GLOBAL_CONCURRENCY=8
 ```
 
 The process keeps a slot until native work and cancellation cleanup finish.
 Changing limits takes effect as runners adopt the new deployment; existing work
 is allowed to drain.
 
-Use the server-side job helper to set a request override:
-
-```bash
-npm run job:rivet -- submit https://www.youtube.com/watch?v=dQw4w9WgXcQ --concurrency 2
-npm run job:rivet -- status <job-id>
-npm run job:rivet -- results <job-id> 0
-```
-
-The helper loads ignored `.env.rivet.local` through the npm script and uses the
-Rivet SDK. Omitting `--concurrency` retains the deployment's request default.
-The foreground CLI continues to use `--parallel` for its local playlist workers.
+Set a request's `concurrency` in its HTTP/MCP submission to override the host's
+request default. The foreground CLI uses `--parallel` for local playlist workers.
 
 Defaults: six-hour media duration, 512 MiB source/artifact size, 5,000,000 transcript
 characters, 10,000 playlist entries, 20 frames (maximum 100), a 30-minute stage
@@ -553,8 +514,7 @@ local host closes its runtime; persisted work recovers when that host restarts.
 
 `src/core` and `src/application` contain no Node built-ins, provider SDKs, or
 configuration/environment reads. Application ports use typed values and opaque
-artifact references. Native tools, filesystem persistence, and actor runtimes are
-concrete adapters.
+artifact references. Native tools, filesystem persistence, and host runtimes are concrete adapters.
 
 ```mermaid
 flowchart TD
@@ -575,21 +535,13 @@ The foreground CLI keeps its existing output/cache behavior and processes playli
 occurrences, including forced duplicate occurrences. Durable jobs deduplicate video
 membership within each request. Both use the shared dispatch policy and pipeline
 stage functions. Request validation/defaults, durable coordination, cancellation,
-retry, and video lifecycle live in the application layer; actor actions delegate
-to them. Runtime adapters own timers, admission, fencing, and durable wake delivery.
+retry, and video lifecycle live in the application layer; interfaces delegate to
+those services. Runtime adapters own timers, admission, fencing, and durable wake delivery.
 
-Rivet code appears in both infrastructure and deployment because those layers have
-different responsibilities:
-
-| Location                    | Responsibility                                                                  |
-| --------------------------- | ------------------------------------------------------------------------------- |
-| `src/infrastructure/rivet/` | Implement job, storage, scheduling, admission, and credential ports using Rivet |
-| `src/deployments/rivet/`    | Configure those adapters and start the registry, API, and MCP hosts             |
-| `deployments/rivet/`        | Prepare dependencies for the Rivet runner image                                 |
-| `scripts/rivet/`            | Operate and verify a Rivet deployment through its SDK or build tooling          |
-
-Changing hosting providers replaces the infrastructure adapters and deployment
-composition. The shared pipeline and interface contracts stay the same.
+Infrastructure adapters implement media, model, storage, and runtime ports.
+Deployment composition configures those adapters and starts the selected interface.
+Changing a host replaces these adapters and composition while preserving the shared
+pipeline and interface contracts.
 
 Scrub is a single npm package. Importing `scrub-cli` resolves to `dist/index.js`,
 compiled from `src/index.ts`, and exposes the portable core/application API;
@@ -598,8 +550,8 @@ interface factories, and the installed `scrub` executable starts the local CLI c
 `scrub-cli/local` exposes the explicit Node application factory for embedding;
 construct it with server environment settings and close it when its host stops.
 The portable import graph uses Zod as its only external runtime dependency. The
-same npm package also installs the dependencies for its CLI, Node, provider, and
-Rivet adapters; source separation does not imply a minimal dependency install.
+same npm package also installs dependencies for its CLI, Node host, and model
+provider adapters.
 
 ```text
 src/
@@ -610,19 +562,17 @@ src/
   entrypoints/cli/           # Import-safe runCli(argv, dependencies), Commander + Ink
   entrypoints/api/handler.ts # Fetch-standard job HTTP transport
   entrypoints/mcp/           # Job tools and authenticated stateless MCP HTTP transport
-  infrastructure/node/      # Media tools, scratch staging, CLI bridge, HTTP/metrics hosts
+  infrastructure/node/      # Media tools, scratch staging, CLI bridge and HTTP host
   infrastructure/node/jobs/ # Persistent SQLite scheduler, ownership fences and local adapters
   infrastructure/transcription/ # Provider adapters and scoped fallback
   infrastructure/model/     # Structured model SDK adapters and provider registry
   infrastructure/filesystem/    # Local run records and compatibility publication
   infrastructure/runtime/   # Runner-process admission and concurrency policy
-  infrastructure/rivet/     # Actors, gateway, SQLite storage and admission leases
   deployments/local/cli.ts   # Local executable composition
   deployments/local/api.ts   # Standalone HTTP API + MCP host
   deployments/local/mcp.ts   # Standalone stdio MCP host
   deployments/local/application.ts # Explicit local adapter/service composition
   deployments/model-config.ts # Shared server model defaults and credential-owning factory
-  deployments/rivet/main.ts  # Rivet runtime/listener composition
   index.ts                  # Portable public exports
 ```
 
@@ -633,226 +583,79 @@ npm run build
 
 `npm run build` emits all source modules to the root `dist` directory.
 Adapters supply storage, media processing, transcription, structured models, and run persistence;
-`runVideoPipeline` itself is the same implementation on CLI and Rivet. Rendering
+`runVideoPipeline` is the same implementation for CLI, API, and MCP jobs. Rendering
 receives an explicit timestamp/settings context. Importing the root library API or interface factories starts no server and reads
 no deployment configuration.
 
 ## Container image
 
-The root Dockerfile builds a generic native-tool image. Its default entrypoint is
-the local CLI, and its installed production dependencies are retained without
-provider-specific pruning. Docker BuildKit is required:
+The root Dockerfile builds a native-tool image containing production dependencies,
+FFmpeg/FFprobe, Python, the latest stable yt-dlp resolved during build preparation,
+`faster-whisper==1.2.1`, and a cached base transcription model. Its default
+entrypoint is the local CLI.
+
+Use Docker Buildx and the named Bake profiles to select an interface:
 
 ```bash
-docker build --platform linux/amd64 -t scrub .
-docker run --rm scrub --help
-```
-
-`SCRUB_ENTRYPOINT` selects a compiled composition module at image build time or
-through a runtime environment override. It defaults to
-`dist/deployments/local/cli.js`; CLI arguments are forwarded to Node.
-
-`SCRUB_DEPENDENCY_HOOK` is an optional build argument naming a hook relative to
-`deployments/`. An unset hook is a no-op.
-Each npm install stage mounts `deployments/` read-only at
-`/tmp/scrub-deployment` and runs the selected hook in the same `npm ci` layer,
-before the layer commits. The generic Dockerfile contains no Rivet-specific
-package exclusions.
-
-Use Docker Bake for normal interface/deployment selection:
-
-```bash
-docker buildx bake --file docker-bake.hcl --print rivet-api
-docker buildx bake --file docker-bake.hcl --load local-cli
+npm run build:image -- --load local-cli
 docker run --rm scrub:local-cli-dev --help
-docker buildx bake --file docker-bake.hcl --load rivet-api
+npm run build:image -- --load local-api
 ```
 
-| Bake profile | Startup                          | Purpose                                                                    |
-| ------------ | -------------------------------- | -------------------------------------------------------------------------- |
-| `local-cli`  | Local CLI composition            | Existing foreground commands; the default Bake target                      |
-| `local-api`  | Standalone local API composition | Persistent background jobs through HTTP and MCP                            |
-| `server-api` | Same standalone API composition  | Server deployment with host-supplied storage, auth, and listening settings |
-| `local-mcp`  | Local stdio MCP composition      | A local MCP host launches the container with stdin attached                |
-| `rivet-api`  | Rivet composition                | HTTP API and MCP over Rivet runtime adapters                               |
-
-`TAG` defaults to `dev`, producing tags such as `scrub:rivet-api-dev`.
-`PLATFORM` defaults to `linux/amd64`; the Rivet profile always uses Linux AMD64.
-For example, `TAG=review docker buildx bake --file docker-bake.hcl --load local-api`
-selects `scrub:local-api-review`. Public settings can use Bake overrides such as
-`--set rivet-api.args.SCRUB_RUNNER_CONCURRENCY=4`. Secrets stay in runtime secret
-configuration and must never be passed through Bake arguments.
-
-Rivet-specific exclusions live in `deployments/rivet/prune-dependencies.sh` and
-are selected only by the Rivet build profile. For MCP deployment, upload the exact
-baked `scrub:rivet-api-dev` image through the deployment skill; do not rebuild a
-second image with a different recipe.
-
-Only the direct Rivet CLI fallback needs a generated Dockerfile:
-
-```bash
-npm run prepare:rivet:image
-```
-
-The helper resolves `rivet-api` with `docker buildx bake --print`, then generates
-ignored `.local/deploy/Dockerfile.rivet` from the shared recipe. It preserves all
-resolved public build arguments, including model, concurrency, and inference
-budget settings, by replacing their ARG defaults in every declaring stage.
-Parser directives and unrelated instructions remain intact. Secret-shaped or
-undeclared argument names and multiline values are rejected. The selected Bake
-stage must be the final Dockerfile stage because the CLI cannot select a target;
-unsupported recipe syntax fails closed. Docker Buildx is required; no build or
-daemon connection is started by profile resolution. Regenerate the fallback
-after changing the shared recipe or profile. One-off `--set` overrides used in a
-different Bake invocation are not persistent configuration; place shared choices
-in the profile before generating the CLI fallback.
-
-Hosts that support runtime environment overrides can set `SCRUB_ENTRYPOINT` there
-instead of rebuilding. Starting the Rivet module also requires the runner
-connection, pool, and rollout settings supplied by Rivet.
-
-Another host adapter supplies the required runtime capabilities and its compiled
-composition module, then selects that path through `SCRUB_ENTRYPOINT`. Bake
-profiles choose packaging; the application services define job behavior.
-Cloudflare Workers and Vercel Functions are not implemented deployment profiles.
-
-Repository deployment assets include the Rivet cleanup hook plus three generic
-media files: `deployments/image/requirements.txt` and the upstream
-`faster-whisper-LICENSE` and `whisper-LICENSE` texts under
-`deployments/image/licenses/`.
-These build assets and helpers are separate from the published npm package.
-
-## Rivet deployment
-
-Build the application with `npm run build`, or start the Rivet composition with
-`npm run start:rivet`. A Rivet image uses the `rivet-api` Bake profile to select its
-startup module and dependency cleanup hook. The Docker image includes FFmpeg/FFprobe, Python,
-the latest stable yt-dlp resolved at build preparation, `faster-whisper==1.2.1`,
-and a downloaded base model. `npm run build:image` and
-`npm run prepare:rivet:image` check official PyPI metadata and refresh yt-dlp's
+`npm run build:image` checks official PyPI metadata and refreshes yt-dlp's exact
 version and distribution hashes in `deployments/image/requirements.txt` before
-Docker can reuse cached layers. A failed upstream check stops preparation. For a
-raw Docker build, run `npm run update:ytdlp:image` first. The image installation
-still verifies the complete dependency lock and runs `pip check`; a dependency
-change that conflicts with that lock requires refreshing its affected packages.
-A running image keeps its installed version until a new image is deployed. Other
-transcription models require corresponding deployment assets. The default runner
-tries captions and faster-whisper. Hosted providers use injected
-`OPENAI_API_KEY`/`DEEPGRAM_API_KEY` when configured. Vision and summary providers use
-the model configuration above; their keys are resolved server-side from the
-environment or the credential actor and never placed in Docker build arguments
-or image layers. The Rivet composition defaults to the credential actor source;
-the generic image does not preset `SCRUB_MODEL_CREDENTIAL_SOURCE`.
+Docker can reuse cached layers. A failed upstream check stops preparation. Before
+a direct `docker build`, run `npm run update:ytdlp:image` explicitly. The image
+installation verifies the complete dependency lock and runs `pip check`;
+conflicting dependency changes require refreshing the affected lock entries.
+A running container retains its installed version until its image is rebuilt.
 
-The application listens on `PORT` (default 8080). Prometheus metrics use a separate
-loopback listener at `RIVETKIT_METRICS_PORT` (default 9464). The registry starts as a
-native runner without starting a local engine or SDK services. The cluster supplies
-its runner connection and rollout settings.
+| Bake profile | Startup               | Purpose                                                |
+| ------------ | --------------------- | ------------------------------------------------------ |
+| `local-cli`  | CLI composition       | Foreground commands; the default Bake target           |
+| `local-api`  | API composition       | Persistent background jobs through HTTP and MCP        |
+| `server-api` | Same API composition  | Host-supplied storage, auth, and listening settings    |
+| `local-mcp`  | Stdio MCP composition | An MCP host launches the container with stdin attached |
 
-Deploy your cluster in your Rivet organization using the
-Rivet MCP server's [rivet-deploy-image skill](https://github.com/rivet-dev/skills/tree/main/skills/rivet-deploy-image).
-It covers the Linux AMD64 build, image upload, rollout, public endpoint, and
-rollback build ID. Build with the `rivet-api` Bake profile above and pass that
-exact final image into its image-upload flow.
+`TAG` defaults to `dev`, producing tags such as `scrub:local-cli-dev`.
+`PLATFORM` defaults to `linux/amd64`. For example,
+`TAG=review npm run build:image -- --load local-api` selects
+`scrub:local-api-review`. Public settings can use Bake overrides such as
+`--set local-api.args.SCRUB_RUNNER_CONCURRENCY=4`.
 
-The cluster-capable CLI fallback uses the generated compatibility recipe. The
-[cluster CLI](https://rivet.dev/docs/cli/) accepts a Dockerfile and build context
-rather than arbitrary Docker build arguments:
+`SCRUB_ENTRYPOINT` selects the compiled composition module at image build time or
+through a runtime environment override. It defaults to
+`dist/deployments/local/cli.js`; CLI arguments are forwarded to Node. Additional
+hosts can supply their own adapters and compiled composition module through the
+same setting.
 
-```bash
-rivet login
-RIVET_CLUSTER=your-cluster
-RIVET_ORGANIZATION=your-organization
-npm run prepare:rivet:image
-rivet deploy --cluster "$RIVET_CLUSTER" --org "$RIVET_ORGANIZATION" --yes \
-  --dockerfile .local/deploy/Dockerfile.rivet --build-context .
-```
-
-Rollback reuses a prior build and needs no generated overlay:
+Keep secrets in runtime configuration. For example, start the API with protected
+env files and a named volume for durable state:
 
 ```bash
-rivet deploy --cluster "$RIVET_CLUSTER" --org "$RIVET_ORGANIZATION" --yes --build "PREVIOUS_BUILD_ID"
+docker run --rm -p 8080:8080 \
+  --env-file .env.local --env-file .env.models.local \
+  --mount source=scrub-data,target=/data \
+  -e SCRUB_DATA_DIR=/data scrub:local-api-dev
 ```
 
-The pool public URL serves Scrub's HTTP API. Set `RIVET_ENDPOINT` to the engine
-endpoint supplied for your cluster. The public app URL and engine endpoint serve
-different purposes.
+The API listens on `PORT` (default 8080). Configure a nonempty `SCRUB_API_TOKEN`
+in `.env.local`; provider keys belong in `.env.models.local`. Local stdio MCP can
+be started with the `local-mcp` image and `docker run --rm -i` so its MCP host owns
+stdin/stdout. Secrets are never Docker build arguments or image layers.
 
-Create the ignored server/admin file from the safe template, or use your project's
-secret manager:
+Repository image assets are the hash-locked
+`deployments/image/requirements.txt` and the required upstream
+`faster-whisper-LICENSE` and `whisper-LICENSE` texts under
+`deployments/image/licenses/`. Build helpers and assets are separate from the
+published npm package.
 
-```bash
-cp -n .env.example .env.rivet.local
-chmod 600 .env.rivet.local
-```
-
-Edit `.env.rivet.local` locally with your cluster's engine endpoint, admin token,
-pool public URL, and optional app API token. The example destinations below are
-reserved placeholders:
-
-```dotenv
-RIVET_ENDPOINT=https://engine.example.invalid
-RIVET_TOKEN=
-RIVET_PUBLIC_URL=https://app.example.invalid
-# SCRUB_API_TOKEN=
-```
-
-The admin token belongs only in server code and deploy pipelines. Exclude it from
-source control, browser bundles, image layers, command arguments, and logs.
-Rivet SDK integrations use `createClient({ endpoint: process.env.RIVET_ENDPOINT,
-token: process.env.RIVET_TOKEN })` and the typed registry. Background requests use
-the request and video actors through the shared job services.
-Public integrations access background jobs through the HTTP routes. Repository
-source compositions also use the internal `RivetJobGateway` server adapter; it is
-not a public package export.
-
-Earlier manual document-actor integrations should migrate to the job API. The
-superseded `scrub` document actor and `ArtifactService` API have been retired;
-standalone prompt assembly and summary rendering remain available through the
-CLI and portable library functions.
-
-After building and storing the endpoint/token in ignored `.env.rivet.local`, the
-server-side helper submits work and checks it later:
-
-```bash
-npm run job:rivet -- submit 'https://www.youtube.com/watch?v=jNQXAC9IVRw'
-npm run job:rivet -- status <returned-job-id>
-npm run job:rivet -- results <returned-job-id>
-npm run job:rivet -- cancel <returned-job-id>
-```
-
-`retry <job-id>` resumes failed/cancelled work with a renewed attempt budget.
-
-Download failures emit a bounded JSON diagnostic containing the video ID,
+Download failures emit bounded JSON diagnostics containing the video ID,
 operation (`metadata`, `audio`, or `video`), exit status or signal when available,
 elapsed time, attempt identity, and up to 8 KiB of redacted stderr. CLI and server
-deployments use the same native adapter; the core pipeline does not read logging
-configuration or persist raw exception causes in public results.
-
-Rivet also keeps a bounded diagnostic journal in each video actor: at most 20
-events and 256 KiB. Read the latest events with the server-side operator command:
-
-```bash
-npm run diagnostics:rivet -- <job-id> <video-id>
-```
-
-An optional final argument selects one to five events. Reads require a short-lived
-actor-bound proof created from the protected Rivet admin token; public job errors
-stay generic. Credentials, authentication headers, cookies, and URL credentials
-are redacted before logs or diagnostic records are written. Logging failures do
-not change a download result or consume pipeline retry budgets.
-
-To retry an existing request, use `npm run job:rivet -- retry <job-id>`.
-Only failed or cancelled videos restart; completed videos keep their saved
-artifacts, inference checkpoints, and model usage.
-This helper uses the Rivet SDK through the engine endpoint. To exercise a live
-video in the deployment smoke check, set `RIVET_VERIFY_VIDEO_URL` when running
-`npm run verify:rivet`.
-
-After a rollout, retain the returned `build_id` and pool public URL. Run
-`npm run verify:rivet` to check the app and an actor action; when MCP is connected,
-confirm the actor through its tools too. A build/test pass does not establish a
-successful live rollout or prove that YouTube is reachable from the deployed pool.
+hosts use the same native adapter. Credentials, authentication headers, cookies,
+and URL credentials are redacted before logging; public job errors remain generic.
+Logging failures do not change a download result or consume pipeline retry budgets.
 
 ## Development
 
@@ -866,7 +669,7 @@ npm run build
 
 Tests cover the same application pipeline against storage adapters, browser bundle
 execution without Node globals, native processes/cancellation, real CLI subprocesses
-with fixture executables, Fetch routes/streaming, and Rivet adapter state changes.
+with fixture executables, Fetch routes/streaming, and persistent job-state recovery.
 Live network/media/model checks are separate. Hosted transcription, configured
 vision/summary calls, and runner compute use their providers' billing. Preprocessing
 alone does not make vision or summary calls.

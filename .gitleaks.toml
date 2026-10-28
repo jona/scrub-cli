@@ -2,9 +2,3 @@ title = "Scrub publication checks"
 
 [extend]
 useDefault = true
-
-[[rules]]
-id = "rivet-admin-token"
-description = "Rivet cluster admin token"
-regex = '''\badmin_[0-9a-fA-F]{64}\b'''
-keywords = ["admin_"]

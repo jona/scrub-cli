@@ -216,7 +216,6 @@ export interface JobVideo {
   status: RunStatus | "skipped";
   stage?: string;
   progress?: number;
-  actorId?: string;
   result?: VideoResult;
   failure?: Failure;
 }

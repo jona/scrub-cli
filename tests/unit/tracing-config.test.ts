@@ -40,7 +40,7 @@ describe("server-owned LangSmith tracing configuration", () => {
     const env = {
       LANGSMITH_API_KEY: " tracing-secret-fixture ",
       OPENAI_API_KEY: "model-secret-fixture",
-      RIVET_TOKEN: "admin-secret-fixture",
+      ADMIN_API_TOKEN: "admin-secret-fixture",
       SCRUB_API_TOKEN: "app-secret-fixture",
       ANTHROPIC_API_KEY: "model-secret-fixture",
       UNUSED_PASSWORD: "",
