@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Upgrade `@deepgram/sdk` to v5.18.0 to remove the vulnerable `deepmerge` dependency.
+
+### Changed
+
+- Migrate Deepgram transcription to the v5 client API, preserving streamed uploads, language selection, cancellation, deadlines, and transcript segments.
+
 ## [0.3.0] - 2026-11-04
 
 ### Added

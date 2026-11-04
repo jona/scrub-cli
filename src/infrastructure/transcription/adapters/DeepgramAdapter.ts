@@ -3,7 +3,13 @@ import {
   type AdapterEnvironmentOptions,
 } from "../environment.js";
 import { createReadStream, statSync } from "fs";
-import { createClient, DeepgramClient } from "@deepgram/sdk";
+import {
+  DeepgramClient,
+  DeepgramError,
+  DeepgramTimeoutError,
+  type ListenV1Response,
+} from "@deepgram/sdk";
+import { PipelineError, throwIfAborted } from "../../../core/errors.js";
 import type {
   ITranscriber,
   TranscriptionResult,
@@ -14,8 +20,7 @@ import type {
 /**
  * Adapter for Deepgram Speech-to-Text API
  *
- * Requires apis.deepgram in ~/.scrub/config.json
- * Known for excellent accuracy and fast processing
+ * Credentials or a client are supplied by the host environment.
  */
 export class DeepgramAdapter implements ITranscriber {
   readonly name = "Deepgram API";
@@ -39,7 +44,7 @@ export class DeepgramAdapter implements ITranscriber {
     }
 
     // Initialize client
-    this.client = createClient(apiKey);
+    this.client = new DeepgramClient({ apiKey, logging: { silent: true } });
     return true;
   }
 
@@ -50,6 +55,7 @@ export class DeepgramAdapter implements ITranscriber {
     audioPath: string,
     options?: TranscriptionOptions
   ): Promise<TranscriptionResult> {
+    throwIfAborted(options?.signal, "transcribe");
     const { config, logger } = await adapterEnvironment(this.environment);
     if (!this.client) {
       const available = await this.isAvailable();
@@ -77,36 +83,61 @@ export class DeepgramAdapter implements ITranscriber {
     // Determine audio mimetype based on extension
     const mimetype = this.getMimeType(audioPath);
 
-    this.client =
-      this.environment.deepgramClient ??
-      createClient(config.getApiKey("deepgram")!, {
-        global: { fetch: { options: { signal: options?.signal } } },
-      });
-
     // Call Deepgram API
     try {
-      const { result, error } =
-        await this.client!.listen.prerecorded.transcribeFile(audioStream, {
-          model: "nova-2", // Latest and most accurate model
+      const result = await this.client!.listen.v1.media.transcribeFile(
+        audioStream,
+        {
+          model: "nova-2",
           smart_format: true,
           punctuate: true,
           paragraphs: true,
           utterances: true,
           language: language !== "auto" ? language : undefined,
           detect_language: language === "auto",
-          mimetype,
-        });
+        },
+        {
+          abortSignal: options?.signal,
+          timeoutInSeconds:
+            options?.timeoutMs === undefined
+              ? undefined
+              : options.timeoutMs / 1000,
+          // The runtime owns retries; an upload stream cannot be replayed.
+          maxRetries: 0,
+          headers: { "Content-Type": mimetype },
+        }
+      );
+      throwIfAborted(options?.signal, "transcribe");
 
-      if (error) {
-        throw new Error(`Deepgram transcription failed: ${error.message}`);
-      }
-
-      if (!result) {
+      if (!result || !("results" in result)) {
         throw new Error("Deepgram returned empty result");
       }
 
       // Parse the response
       return this.parseResponse(result);
+    } catch (error) {
+      throwIfAborted(options?.signal, "transcribe");
+      if (error instanceof DeepgramTimeoutError) {
+        throw new PipelineError("timeout", "Deepgram transcription timed out", {
+          stage: "transcribe",
+          retryable: true,
+          cause: error,
+        });
+      }
+      if (error instanceof DeepgramError) {
+        const status = error.statusCode;
+        throw new PipelineError(
+          status === 429 ? "rate_limited" : "processing_failed",
+          "Deepgram transcription failed",
+          {
+            stage: "transcribe",
+            retryable:
+              status === 429 || (status !== undefined && status >= 500),
+            cause: error,
+          }
+        );
+      }
+      throw error;
     } finally {
       audioStream.destroy();
     }
@@ -131,11 +162,11 @@ export class DeepgramAdapter implements ITranscriber {
   /**
    * Parse Deepgram API response to our format
    */
-  private parseResponse(result: DeepgramResult): TranscriptionResult {
+  private parseResponse(result: ListenV1Response): TranscriptionResult {
     const channel = result.results?.channels?.[0];
     const alternative = channel?.alternatives?.[0];
 
-    if (!alternative) {
+    if (typeof alternative?.transcript !== "string") {
       throw new Error("No transcription results in Deepgram response");
     }
 
@@ -144,12 +175,25 @@ export class DeepgramAdapter implements ITranscriber {
     let segments: TranscriptSegment[];
 
     if (utterances && utterances.length > 0) {
-      segments = utterances.map((utt) => ({
-        start: utt.start,
-        end: utt.end,
-        text: utt.transcript.trim(),
-        confidence: utt.confidence,
-      }));
+      segments = utterances.map((utt) => {
+        if (
+          typeof utt.transcript !== "string" ||
+          typeof utt.start !== "number" ||
+          typeof utt.end !== "number" ||
+          !Number.isFinite(utt.start) ||
+          !Number.isFinite(utt.end) ||
+          utt.start < 0 ||
+          utt.end < utt.start
+        ) {
+          throw new Error("Invalid utterance in Deepgram response");
+        }
+        return {
+          start: utt.start,
+          end: utt.end,
+          text: utt.transcript.trim(),
+          confidence: utt.confidence,
+        };
+      });
     } else if (alternative.words && alternative.words.length > 0) {
       // Fall back to word-level timestamps, grouped into sentences
       segments = this.groupWordsIntoSegments(alternative.words);
@@ -193,6 +237,17 @@ export class DeepgramAdapter implements ITranscriber {
     const maxDuration = 30; // Max segment duration
 
     for (const word of words) {
+      if (
+        typeof word.word !== "string" ||
+        typeof word.start !== "number" ||
+        typeof word.end !== "number" ||
+        !Number.isFinite(word.start) ||
+        !Number.isFinite(word.end) ||
+        word.start < 0 ||
+        word.end < word.start
+      ) {
+        throw new Error("Invalid word in Deepgram response");
+      }
       const shouldStartNew =
         !currentSegment ||
         word.start - currentSegment.end > maxGap ||
@@ -231,32 +286,9 @@ export class DeepgramAdapter implements ITranscriber {
  * Deepgram response types
  */
 interface DeepgramWord {
-  word: string;
+  word?: string;
   punctuated_word?: string;
-  start: number;
-  end: number;
-  confidence: number;
-}
-
-interface DeepgramResult {
-  metadata?: {
-    duration?: number;
-  };
-  results?: {
-    channels?: Array<{
-      detected_language?: string;
-      alternatives?: Array<{
-        transcript: string;
-        confidence: number;
-        words?: DeepgramWord[];
-        languages?: string[];
-      }>;
-    }>;
-    utterances?: Array<{
-      start: number;
-      end: number;
-      transcript: string;
-      confidence: number;
-    }>;
-  };
+  start?: number;
+  end?: number;
+  confidence?: number;
 }
