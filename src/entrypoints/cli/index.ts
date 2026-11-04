@@ -36,7 +36,7 @@ export async function runCli(
     .description(
       "Turn audio and video content into comprehensive knowledge bases for AI agents"
     )
-    .version("0.2.1");
+    .version("0.3.0");
 
   // ── Orchestrators ──────────────────────────────────────────────────
 

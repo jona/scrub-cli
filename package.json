@@ -1,6 +1,6 @@
 {
   "name": "scrub-cli",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Turn audio and video into deterministic, model-agnostic knowledge artifacts for AI agents.",
   "main": "dist/index.js",
   "bin": {

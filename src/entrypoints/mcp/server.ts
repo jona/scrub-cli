@@ -228,7 +228,7 @@ const readAnnotations = {
 
 /** Register the same application job operations for every MCP transport. No hosting or configuration reads. */
 export function createScrubMcpServer({ jobs }: McpDependencies): McpServer {
-  const server = new McpServer({ name: "scrub-mcp-server", version: "0.2.1" });
+  const server = new McpServer({ name: "scrub-mcp-server", version: "0.3.0" });
   const jobOutput = z.object({ job: snapshotSchema });
   server.registerTool(
     "scrub_submit_job",

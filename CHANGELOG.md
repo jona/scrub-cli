@@ -7,14 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-04
+
+### Added
+
+- Shared, environment-agnostic processing pipeline with injected storage, media, model, and runtime adapters.
+- Persistent background jobs through an authenticated HTTP API and MCP tools, with status, paginated results, artifact downloads, cancellation, and retry.
+- Standalone Node hosts for the HTTP API, MCP over HTTP, and MCP over stdio.
+- Model-agnostic `prompt`, `render`, and `extract-frames` CLI commands with structured prompt, schema, and frame artifacts.
+- Configurable OpenAI-compatible and Anthropic vision and summary providers, validated output, and model usage artifacts.
+- Optional LangSmith tracing with server-side credentials, redacted metadata, and explicit opt-in for prompt and response capture.
+- Bounded, redacted native download diagnostics with operation, exit status, timing, and stderr details.
+- Automatic refresh of the image's hash-locked yt-dlp requirement before container builds.
+
 ### Changed
 
-- Simplified the package to the shared pipeline and local CLI, HTTP API, and MCP hosts.
+- **Breaking:** The CLI defaults to deterministic preprocessing; use `--summarize` to opt in to vision, summary generation, and Markdown rendering.
+- **Breaking:** Reorganized library exports around the shared pipeline and CLI, API, MCP, and local application interfaces; retired superseded document APIs.
+- **Breaking:** Require Node.js 22.13.0 or newer and update provider and MCP SDKs.
+- Keep the shared core, application services, entry points, and deployment composition separate within one npm package.
+- Reuse durable stage checkpoints and completed model results across interrupted runs and retries.
+- Configure concurrency per request and runner, with an optional application-wide cap in the runtime layer.
+- Process long transcripts through bounded chunking and note compression, with configurable model budgets and output-token recovery.
 - Container builds retain native media tooling, model configuration, and runtime-selected entry points.
+
+### Fixed
+
+- Keep successful videos and their artifacts intact when retrying failed playlist members.
+- Bound frame sampling to the source timeline and avoid timestamps beyond the media duration.
+- Bound metadata output and stream native command diagnostics without allowing progress output to exhaust log buffers.
+- Make the compiled CLI executable after building.
 
 ### Removed
 
-- Unused hosted-runtime adapters, deployment tooling, and their dependency tree.
+- Legacy `analyze-visuals` and `summarize` CLI commands; use `--summarize` for integrated inference or `prompt` and `render` with an external model.
+- Unused Rivet runtime adapters, deployment tooling, image packaging, and their dependency tree.
 
 ## [0.2.1] - 2026-05-25
 
